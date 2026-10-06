@@ -125,6 +125,7 @@ test('sklizeň po odrůdách a souhrn v detailu vinice', () => withApp(async ({ 
 
 test('starší data se převedou (odrůda jako text, sklizeň jedním číslem)', () => withApp(async ({ page }) => {
   await page.goto(page.url().replace(/#.*$/, '') + '#/vinice/v1');
+  await page.selectOption('#year', '2025');
   assert.match(await text(page, '.kv'), /Odrůdy Ryzlink.*Veltlín/);
   assert.match(await text(page, 'main'), /celá vinice 1 500 kg 20 °NM/);
 }, {
@@ -219,6 +220,63 @@ test('pozdní odpověď serveru nepřepíše novější místní změnu', () => 
   await page.goto(page.url().replace(/#.*$/, '') + '#/vinice');
   assert.match(await text(page, '.list'), /Druhá/);
 }));
+
+test('výběr roku přepíná práce, detail vinice, lidi i export', () => {
+  const cy = String(new Date().getFullYear());
+  const work = (id, date, extra) => ({ id, vineyardId: 'v1', date, status: 'done', workers: [{ workerId: 'p1', hours: 4 }], products: [], harvest: [], ...extra });
+  return withApp(async ({ page }) => {
+    const base = page.url().replace(/#.*$/, '');
+    assert.equal(await page.inputValue('#year'), cy, 'výchozí je letošní rok');
+    assert.deepEqual(await page.$$eval('#year option', o => o.map(x => x.textContent)), [cy, '2024']);
+
+    await page.goto(base + '#/prace');
+    assert.equal(await text(page, 'main h1'), `Práce ${cy}`);
+    assert.match(await text(page, 'main p.muted'), /^1 záznamů/);
+
+    await page.selectOption('#year', '2024');
+    assert.ok(await page.$eval('#year', el => el.classList.contains('past')), 'minulý rok je zvýrazněný');
+    assert.equal(await text(page, 'main h1'), 'Práce 2024');
+    assert.equal(await text(page, 'main p.muted'), '2 záznamů · 8 odpracovaných hodin');
+    await page.selectOption('[data-filter=month]', '09');
+    assert.match(await text(page, 'main p.muted'), /^1 záznamů/);
+
+    await page.goto(base + '#/vinice/v1');
+    const main = await text(page, 'main');
+    assert.match(main, /odpracováno v roce 2024/);
+    assert.match(main, /Sklizeň 2024 Odrůda kg t\/ha °NM Pálava 4 000 4 19/);
+    assert.match(main, new RegExp(`Sklizeň po letech Rok kg t/ha °NM ${cy} 5 000 5 21 2024 4 000 4 19`));
+    await page.click(`[data-action=set-year][data-year="${cy}"]`);
+    assert.equal(await page.inputValue('#year'), cy);
+    assert.match(await text(page, 'main'), /Sklizeň \d{4} Odrůda kg t\/ha °NM Pálava 5 000 5 21/);
+
+    await page.selectOption('#year', '2024');
+    await page.goto(base + '#/pracovnici');
+    assert.equal(await page.inputValue('[data-filter=workersPeriod]'), '', 'u minulého roku celý rok');
+    assert.match(await text(page, 'main'), /Rok 2024.*Celkem 8 1 600 Kč/);
+
+    await page.goto(base + '#/nastaveni');
+    assert.equal(await page.inputValue('#export-year'), '2024');
+
+    // Nová práce s letošním datem při vybraném roce 2024 → přepne na letošek.
+    await page.click('.topbar [data-action=new-work]');
+    await page.check('input[name=vineyards] >> nth=0');
+    await page.click('#dlg button[type=submit]');
+    await saved(page);
+    assert.equal(await page.inputValue('#year'), cy);
+  }, {
+    initialData: {
+      version: 1,
+      vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [{ name: 'Pálava', area: 1 }] }],
+      workers: [{ id: 'p1', name: 'Jan', rate: 200 }],
+      products: [],
+      works: [
+        work('a', '2024-04-02', { type: 'Řez' }),
+        work('b', '2024-09-20', { type: 'Sklizeň', harvest: [{ variety: 'Pálava', kg: 4000, sugar: 19 }] }),
+        work('c', `${cy}-01-15`, { type: 'Sklizeň', harvest: [{ variety: 'Pálava', kg: 5000, sugar: 21 }] }),
+      ],
+    },
+  });
+});
 
 test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
   const manifest = await (await fetch(server.url + 'manifest.webmanifest')).json();

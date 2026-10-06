@@ -33,6 +33,10 @@ Změny tvaru dat řešit migrací v `normalizeDb()`, která se volá při načte
 
 Plochy jsou v aplikaci v **ha**. Registr vinic je uvádí v m², převádí se při importu.
 
+Pracovní rok = kalendářní rok data práce. Výběr roku v záhlaví (`selectedYear`, jen v paměti, výchozí letošek) filtruje
+všechny roční údaje. V pohledech používat `inYear(w)` a `yearLabel()` („letos“ / „v roce 2024“), ne `today()`.
+`today()` patří jen k věcem vázaným na dnešek (ochranné lhůty, výchozí datum nové práce).
+
 Sklizeň je u práce seznam `harvest: [{ variety, kg, sugar }]`. Prázdné `variety` znamená celou vinici.
 Odrůdy vinice jsou `varieties: [{ name, area, year, code?, vines?, training? }]` a stejná odrůda může být víckrát (různé roky výsadby).
 

@@ -64,6 +64,9 @@ h3 { font-size: 1rem; margin: 0 0 8px; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.1rem; color: var(--text); text-decoration: none; }
 .brand img { border-radius: 7px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
+.year { width: auto; min-height: 36px; padding: 4px 8px; font-weight: 700; }
+.year.past { background: var(--warn-soft); color: var(--warn); border-color: currentColor; }
+tr.current td { font-weight: 700; }
 .sync { font-size: .8rem; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 5px; }
 .sync::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .sync[data-state=disk]::before { background: var(--ok); }

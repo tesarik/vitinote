@@ -265,6 +265,34 @@ const options = (list, selected, { empty } = {}) =>
     return `<option value="${esc(value)}"${value === selected ? ' selected' : ''}>${esc(label)}</option>`;
   }).join('');
 
+/* ================= Year ================= */
+
+// Pracovní rok = kalendářní rok data práce. Výběr v záhlaví přepíná všechny roční údaje.
+const currentYear = () => today().slice(0, 4);
+let selectedYear = currentYear();
+const inYear = w => w.date.startsWith(selectedYear);
+const yearLabel = () => (selectedYear === currentYear() ? 'letos' : `v roce ${selectedYear}`);
+const MONTHS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+const monthOptions = (selected, empty) => options(MONTHS.map((m, i) => ({ id: pad(i + 1), name: m })), selected, { empty });
+
+function availableYears() {
+  const years = new Set([currentYear(), selectedYear, ...db.works.map(w => w.date.slice(0, 4))]);
+  return [...years].sort().reverse();
+}
+
+function renderYearSelect() {
+  const sel = $('#year');
+  sel.innerHTML = availableYears().map(y => `<option${y === selectedYear ? ' selected' : ''}>${y}</option>`).join('');
+  sel.classList.toggle('past', selectedYear !== currentYear());
+}
+
+function setYear(year) {
+  selectedYear = year;
+  workFilters.month = '';
+  workersPeriod = year === currentYear() ? thisMonth().slice(5) : '';
+  render();
+}
+
 /* ================= Views ================= */
 
 function renderDashboard() {
@@ -272,8 +300,10 @@ function renderDashboard() {
   const done = db.works.filter(w => !isPlanned(w));
   const planned = db.works.filter(isPlanned).sort((a, b) => a.date.localeCompare(b.date));
   const area = db.vineyards.reduce((s, v) => s + (+v.area || 0), 0);
-  const hoursMonth = done.filter(w => w.date.startsWith(thisMonth())).reduce((s, w) => s + workHours(w), 0);
-  const worksYear = done.filter(w => w.date.startsWith(t.slice(0, 4))).length;
+  const isCurrent = selectedYear === currentYear();
+  // Letos: hodiny za aktuální měsíc; v minulých letech za celý rok.
+  const hoursShown = done.filter(w => w.date.startsWith(isCurrent ? thisMonth() : selectedYear)).reduce((s, w) => s + workHours(w), 0);
+  const worksYear = done.filter(inYear).length;
   const phi = sortByName(db.vineyards)
     .map(v => ({ v, info: phiInfo(v.id) }))
     .filter(x => x.info && x.info.until > t);
@@ -293,8 +323,8 @@ function renderDashboard() {
     <div class="stats">
       <div class="stat"><div class="v">${db.vineyards.length}</div><div class="l">vinic</div></div>
       <div class="stat"><div class="v">${fmtNum(area)} ha</div><div class="l">celková výměra</div></div>
-      <div class="stat"><div class="v">${fmtNum(hoursMonth, 1)} h</div><div class="l">odpracováno tento měsíc</div></div>
-      <div class="stat"><div class="v">${worksYear}</div><div class="l">prací letos</div></div>
+      <div class="stat"><div class="v">${fmtNum(hoursShown, 1)} h</div><div class="l">odpracováno ${isCurrent ? 'tento měsíc' : yearLabel()}</div></div>
+      <div class="stat"><div class="v">${worksYear}</div><div class="l">prací ${yearLabel()}</div></div>
     </div>
 
     ${phi.length ? `
@@ -317,8 +347,8 @@ function renderDashboard() {
     </div>
 
     <div class="card">
-      <div class="page-head"><h2>Poslední práce</h2><a href="#/prace">Všechny →</a></div>
-      ${workList(sortWorksDesc(done).slice(0, 10))}
+      <div class="page-head"><h2>${isCurrent ? 'Poslední práce' : `Poslední práce ${selectedYear}`}</h2><a href="#/prace">Všechny →</a></div>
+      ${workList(sortWorksDesc(done.filter(inYear)).slice(0, 10))}
     </div>`;
 }
 
@@ -329,19 +359,19 @@ function renderWorks() {
   const works = sortWorksDesc(db.works.filter(w =>
     (!f.vineyardId || w.vineyardId === f.vineyardId) &&
     (!f.type || w.type === f.type) &&
-    (!f.month || w.date.startsWith(f.month)) &&
+    w.date.startsWith(f.month ? `${selectedYear}-${f.month}` : selectedYear) &&
     (!f.status || (f.status === 'planned') === isPlanned(w))
   ));
   const hours = works.filter(w => !isPlanned(w)).reduce((s, w) => s + workHours(w), 0);
   return `
     <div class="page-head">
-      <h1>Práce</h1>
+      <h1>Práce ${selectedYear}</h1>
       <button class="btn primary" data-action="new-work">+ Zapsat práci</button>
     </div>
     <div class="filters">
       <select data-filter="vineyardId">${options(sortByName(db.vineyards), f.vineyardId, { empty: 'Všechny vinice' })}</select>
       <select data-filter="type">${options(WORK_TYPES, f.type, { empty: 'Všechny práce' })}</select>
-      <input type="month" data-filter="month" value="${f.month}" aria-label="Měsíc">
+      <select data-filter="month" aria-label="Měsíc">${monthOptions(f.month, 'Celý rok')}</select>
       <select data-filter="status">${options([{ id: 'done', name: 'Provedené' }, { id: 'planned', name: 'Plánované' }], f.status, { empty: 'Provedené i plánované' })}</select>
     </div>
     <p class="muted small">${works.length} záznamů · ${fmtNum(hours, 1)} odpracovaných hodin</p>
@@ -350,18 +380,17 @@ function renderWorks() {
 
 function renderVineyards() {
   const t = today();
-  const year = t.slice(0, 4);
   const rows = sortByName(db.vineyards).map(v => {
     const works = db.works.filter(w => w.vineyardId === v.id && !isPlanned(w));
     const last = sortWorksDesc(works)[0];
-    const hours = works.filter(w => w.date.startsWith(year)).reduce((s, w) => s + workHours(w), 0);
+    const hours = works.filter(inYear).reduce((s, w) => s + workHours(w), 0);
     const phi = phiInfo(v.id);
     return `
       <li class="item" data-action="go" data-href="#/vinice/${v.id}">
         <div class="item-main">
           <div class="item-title">${esc(v.name)} ${phi && phi.until > t ? `<span class="badge warn">OL do ${fmtDate(phi.until)}</span>` : ''}</div>
           <div class="item-meta">${[v.area ? `${fmtNum(v.area, 4)} ha` : '', esc(varietyNames(v)), v.dpb ? `DPB ${esc(v.dpb)}` : ''].filter(Boolean).join(' · ')}</div>
-          <div class="item-meta">${last ? `naposledy: ${esc(last.type)} ${fmtDate(last.date)}` : 'zatím bez prací'} · letos ${fmtNum(hours, 1)} h</div>
+          <div class="item-meta">${last ? `naposledy: ${esc(last.type)} ${fmtDate(last.date)}` : 'zatím bez prací'} · ${yearLabel()} ${fmtNum(hours, 1)} h</div>
         </div>
       </li>`;
   }).join('');
@@ -377,13 +406,13 @@ function renderVineyardDetail(id) {
   const v = byId(db.vineyards, id);
   if (!v) return `<p class="empty">Vinice nenalezena. <a href="#/vinice">Zpět</a></p>`;
   const t = today();
-  const year = t.slice(0, 4);
-  const works = sortWorksDesc(db.works.filter(w => w.vineyardId === id));
-  const doneYear = works.filter(w => !isPlanned(w) && w.date.startsWith(year));
+  const allWorks = db.works.filter(w => w.vineyardId === id);
+  const works = sortWorksDesc(allWorks.filter(inYear));
+  const doneYear = works.filter(w => !isPlanned(w));
   const hours = doneYear.reduce((s, w) => s + workHours(w), 0);
   const sprays = doneYear.filter(w => w.products?.length).length;
   const harvest = doneYear.reduce((s, w) => s + harvestKg(w), 0);
-  const harvestTable = renderHarvestByVariety(v, doneYear);
+  const harvestTable = renderHarvestByVariety(v, doneYear) + renderHarvestByYear(v, allWorks);
   const phi = phiInfo(id);
 
   return `
@@ -413,18 +442,18 @@ function renderVineyardDetail(id) {
       </dl>
     </div>
     <div class="stats">
-      <div class="stat"><div class="v">${fmtNum(hours, 1)} h</div><div class="l">odpracováno letos</div></div>
-      <div class="stat"><div class="v">${sprays}</div><div class="l">ošetření letos</div></div>
-      ${harvest ? `<div class="stat"><div class="v">${fmtNum(harvest, 0)} kg</div><div class="l">sklizeno letos${v.area ? ` (${fmtNum(harvest / v.area / 1000)} t/ha)` : ''}</div></div>` : ''}
+      <div class="stat"><div class="v">${fmtNum(hours, 1)} h</div><div class="l">odpracováno ${yearLabel()}</div></div>
+      <div class="stat"><div class="v">${sprays}</div><div class="l">ošetření ${yearLabel()}</div></div>
+      ${harvest ? `<div class="stat"><div class="v">${fmtNum(harvest, 0)} kg</div><div class="l">sklizeno ${yearLabel()}${v.area ? ` (${fmtNum(harvest / v.area / 1000)} t/ha)` : ''}</div></div>` : ''}
     </div>
     ${harvestTable}
     <div class="card">
-      <h2>Historie prací</h2>
+      <h2>Práce ${selectedYear}</h2>
       ${workList(works, { showVineyard: false })}
     </div>`;
 }
 
-// Letošní sklizeň vinice po odrůdách: kg, t/ha (z plochy odrůdy) a průměrná cukernatost vážená množstvím.
+// Sklizeň vinice ve vybraném roce po odrůdách: kg, t/ha (z plochy odrůdy) a průměrná cukernatost vážená množstvím.
 function renderHarvestByVariety(v, works) {
   const rows = new Map();
   for (const w of works) {
@@ -448,7 +477,7 @@ function renderHarvestByVariety(v, works) {
   }).join('');
   return `
     <div class="card">
-      <h2>Sklizeň ${today().slice(0, 4)}</h2>
+      <h2>Sklizeň ${selectedYear}</h2>
       <div class="table-wrap"><table>
         <thead><tr><th>Odrůda</th><th class="num">kg</th><th class="num">t/ha</th><th class="num">°NM</th></tr></thead>
         <tbody>${body}</tbody>
@@ -456,11 +485,40 @@ function renderHarvestByVariety(v, works) {
     </div>`;
 }
 
+// Srovnání ročníků: celková sklizeň vinice po letech (zobrazí se, až jsou data aspoň ze dvou let).
+function renderHarvestByYear(v, works) {
+  const years = new Map();
+  for (const w of works) {
+    if (isPlanned(w) || !w.harvest?.length) continue;
+    const r = years.get(w.date.slice(0, 4)) ?? { kg: 0, sugarKg: 0, sugarBase: 0 };
+    for (const h of w.harvest) {
+      r.kg += +h.kg || 0;
+      if (h.sugar && h.kg) { r.sugarKg += h.sugar * h.kg; r.sugarBase += +h.kg; }
+    }
+    years.set(w.date.slice(0, 4), r);
+  }
+  if (years.size < 2) return '';
+  const body = [...years].sort(([a], [b]) => b.localeCompare(a)).map(([y, r]) => `
+    <tr${y === selectedYear ? ' class="current"' : ''}>
+      <td><a href="#" data-action="set-year" data-year="${y}">${y}</a></td>
+      <td class="num">${fmtNum(r.kg, 0)}</td>
+      <td class="num">${v.area && r.kg ? fmtNum(r.kg / v.area / 1000) : '–'}</td>
+      <td class="num">${r.sugarBase ? fmtNum(r.sugarKg / r.sugarBase, 1) : '–'}</td>
+    </tr>`).join('');
+  return `
+    <div class="card">
+      <h2>Sklizeň po letech</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Rok</th><th class="num">kg</th><th class="num">t/ha</th><th class="num">°NM</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </div>`;
+}
+
 function renderProducts() {
-  const year = today().slice(0, 4);
   const used = {};
   for (const w of db.works) {
-    if (isPlanned(w) || !w.date.startsWith(year)) continue;
+    if (isPlanned(w) || !inYear(w)) continue;
     for (const p of w.products || []) used[p.productId] = (used[p.productId] || 0) + productAmount(w, p);
   }
   const rows = sortByName(db.products).map(p => `
@@ -470,7 +528,7 @@ function renderProducts() {
         <div class="item-meta">${[
           p.phiDays ? `OL ${p.phiDays} dní` : 'bez OL',
           p.defaultDose ? `obvyklá dávka ${fmtNum(p.defaultDose)} ${esc(p.unit)}/ha` : '',
-          `letos spotřebováno ${fmtNum(used[p.id] || 0)} ${esc(p.unit)}`,
+          `${yearLabel()} spotřebováno ${fmtNum(used[p.id] || 0)} ${esc(p.unit)}`,
         ].filter(Boolean).join(' · ')}</div>
         ${p.note ? `<div class="item-note">${esc(p.note)}</div>` : ''}
       </div>
@@ -483,12 +541,14 @@ function renderProducts() {
     <div class="card">${rows ? `<ul class="list">${rows}</ul>` : '<p class="empty">Zatím žádné přípravky.</p>'}</div>`;
 }
 
-let workersMonth = thisMonth();
+// Měsíc ('01'–'12') ve vybraném roce, nebo '' = celý rok.
+let workersPeriod = thisMonth().slice(5);
 
 function renderWorkers() {
+  const prefix = workersPeriod ? `${selectedYear}-${workersPeriod}` : selectedYear;
   const stats = {};
   for (const w of db.works) {
-    if (isPlanned(w) || !w.date.startsWith(workersMonth)) continue;
+    if (isPlanned(w) || !w.date.startsWith(prefix)) continue;
     for (const e of w.workers || []) {
       const s = stats[e.workerId] ??= { hours: 0, byType: {} };
       s.hours += +e.hours || 0;
@@ -515,10 +575,10 @@ function renderWorkers() {
       <h1>Pracovníci</h1>
       <button class="btn primary" data-action="new-worker">+ Přidat</button>
     </div>
-    <div class="filters"><input type="month" data-filter="workersMonth" value="${workersMonth}" aria-label="Měsíc"></div>
+    <div class="filters"><select data-filter="workersPeriod" aria-label="Období">${monthOptions(workersPeriod, `Celý rok ${selectedYear}`)}</select></div>
     <div class="card">
       ${rows ? `
-      <h2>${esc(fmtMonth(workersMonth))}</h2>
+      <h2>${workersPeriod ? esc(fmtMonth(prefix)) : `Rok ${selectedYear}`}</h2>
       <div class="table-wrap"><table>
         <thead><tr><th>Jméno</th><th class="num">Hodiny</th><th class="num">Kč/h</th><th class="num">Náklad</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -529,8 +589,7 @@ function renderWorkers() {
 }
 
 function renderSettings() {
-  const years = [...new Set(db.works.map(w => w.date.slice(0, 4)))].sort().reverse();
-  const yearOpts = (years.length ? years : [today().slice(0, 4)]).map(y => `<option>${y}</option>`).join('');
+  const yearOpts = availableYears().map(y => `<option${y === selectedYear ? ' selected' : ''}>${y}</option>`).join('');
   return `
     <h1>Data</h1>
     <div class="card">
@@ -590,6 +649,7 @@ const routes = {
 function render() {
   const [, page = '', param] = location.hash.split('/');
   const view = routes[page] || renderDashboard;
+  renderYearSelect();
   $('#main').innerHTML = view(param && decodeURIComponent(param));
   $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
 }
@@ -907,6 +967,13 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
       } else {
         Object.assign(w, fields, { vineyardId: vineyardIds[0] });
       }
+      // Ať práce po uložení nezmizí z obrazovky: přepnout na její rok.
+      const workYear = fields.date.slice(0, 4);
+      if (workYear !== selectedYear) {
+        selectedYear = workYear;
+        workFilters.month = '';
+        toast(`Uloženo do roku ${workYear} – přepínám na něj.`);
+      }
     },
     onDelete: isNew ? null : () => {
       if (!confirm('Smazat tento záznam práce?')) return false;
@@ -1017,6 +1084,7 @@ function importRegistryPreview(list) {
 
 const actions = {
   'go': el => { location.hash = el.dataset.href; },
+  'set-year': el => setYear(el.dataset.year),
   'close-dialog': closeForm,
   // Bez data-vineyard (tlačítko v záhlaví) se v detailu vinice předvybere ta vinice.
   'new-work': el => workForm(null, {
@@ -1099,13 +1167,15 @@ document.addEventListener('click', e => {
   actions[el.dataset.action](el);
 });
 
+$('#year').addEventListener('change', e => setYear(e.target.value));
+
 // Zavření dialogu klepnutím mimo něj.
 dlg.addEventListener('click', e => { if (e.target === dlg) closeForm(); });
 
 $('#main').addEventListener('change', e => {
   const t = e.target;
-  if (t.dataset.filter === 'workersMonth') {
-    workersMonth = t.value || thisMonth();
+  if (t.dataset.filter === 'workersPeriod') {
+    workersPeriod = t.value;
     render();
   } else if (t.dataset.filter) {
     workFilters[t.dataset.filter] = t.value;
