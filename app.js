@@ -197,6 +197,36 @@ const kindOf = w => activityOf(w)?.kind ?? 'work';
 const selectableActivities = keepId => db.activities.filter(a => !a.hidden || a.id === keepId);
 const workHours = w => (w.workers || []).reduce((s, e) => s + (+e.hours || 0), 0);
 
+// Práce může trvat víc dní: date = od, dateTo = do (nepovinné).
+const workEnd = w => w.dateTo || w.date;
+const workDays = w => daysBetween(w.date, workEnd(w)) + 1;
+
+// Období 'YYYY' nebo 'YYYY-MM' jako [první den, poslední den].
+function periodRange(prefix) {
+  if (prefix.length === 4) return [`${prefix}-01-01`, `${prefix}-12-31`];
+  const [y, m] = prefix.split('-').map(Number);
+  return [`${prefix}-01`, `${prefix}-${pad(new Date(y, m, 0).getDate())}`];
+}
+
+// Zasahuje práce do období?
+const inPeriod = (w, prefix) => { const [from, to] = periodRange(prefix); return w.date <= to && workEnd(w) >= from; };
+
+// Podíl práce v období: hodiny a množství vícedenní práce se rozpočítají rovnoměrně podle dnů.
+function periodShare(w, prefix) {
+  const [from, to] = periodRange(prefix);
+  const a = w.date > from ? w.date : from;
+  const b = workEnd(w) < to ? workEnd(w) : to;
+  return a > b ? 0 : (daysBetween(a, b) + 1) / workDays(w);
+}
+
+function fmtWorkDate(w) {
+  if (!w.dateTo || w.dateTo === w.date) return fmtDate(w.date);
+  const [y1, m1, d1] = w.date.split('-').map(Number);
+  const [y2, m2, d2] = w.dateTo.split('-').map(Number);
+  if (y1 !== y2) return `${fmtDate(w.date)} – ${fmtDate(w.dateTo)}`;
+  return m1 === m2 ? `${d1}.–${d2}. ${m1}. ${y1}` : `${d1}. ${m1}. – ${d2}. ${m2}. ${y1}`;
+}
+
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg;
@@ -237,8 +267,8 @@ function phiInfo(vineyardId, { at, excludeId } = {}) {
       const prod = byId(db.products, p.productId);
       const days = rowPhiDays(p, prod);
       if (!prod || !(days > 0)) continue;
-      const until = addDays(w.date, days);
-      if (!best || until > best.until) best = { until, product: prod, date: w.date };
+      const until = addDays(workEnd(w), days);
+      if (!best || until > best.until) best = { until, product: prod, date: workEnd(w) };
     }
   }
   return best;
@@ -322,7 +352,7 @@ function workItem(w, { showVineyard = true } = {}) {
   const hours = workHours(w);
   const people = (w.workers || []).map(e => workerName(e.workerId)).join(', ');
   const meta = [
-    fmtDate(w.date),
+    fmtWorkDate(w),
     hours ? `${fmtNum(hours, 1)} h${people ? ` (${esc(people)})` : ''}` : (people ? esc(people) : ''),
     w.products?.length ? esc(productsSummary(w)) : '',
     w.harvest?.length ? esc(harvestSummary(w)) : '',
@@ -363,13 +393,13 @@ const options = (list, selected, { empty } = {}) =>
 // Pracovní rok = kalendářní rok data práce. Výběr v záhlaví přepíná všechny roční údaje.
 const currentYear = () => today().slice(0, 4);
 let selectedYear = currentYear();
-const inYear = w => w.date.startsWith(selectedYear);
+const inYear = w => inPeriod(w, selectedYear);
 const yearLabel = () => (selectedYear === currentYear() ? 'letos' : `v roce ${selectedYear}`);
 const MONTHS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
 const monthOptions = (selected, empty) => options(MONTHS.map((m, i) => ({ id: pad(i + 1), name: m })), selected, { empty });
 
 function availableYears() {
-  const years = new Set([currentYear(), selectedYear, ...db.works.map(w => w.date.slice(0, 4))]);
+  const years = new Set([currentYear(), selectedYear, ...db.works.flatMap(w => [w.date.slice(0, 4), workEnd(w).slice(0, 4)])]);
   return [...years].sort().reverse();
 }
 
@@ -395,7 +425,7 @@ function renderDashboard() {
   const area = db.vineyards.reduce((s, v) => s + (+v.area || 0), 0);
   const isCurrent = selectedYear === currentYear();
   // Letos: hodiny za aktuální měsíc; v minulých letech za celý rok.
-  const hoursShown = done.filter(w => w.date.startsWith(isCurrent ? thisMonth() : selectedYear)).reduce((s, w) => s + workHours(w), 0);
+  const hoursShown = done.reduce((s, w) => s + workHours(w) * periodShare(w, isCurrent ? thisMonth() : selectedYear), 0);
   const worksYear = done.filter(inYear).length;
   const phi = sortByName(db.vineyards)
     .map(v => ({ v, info: phiInfo(v.id) }))
@@ -449,13 +479,14 @@ const workFilters = { vineyardId: '', activityId: '', month: '', status: '' };
 
 function renderWorks() {
   const f = workFilters;
+  const period = f.month ? `${selectedYear}-${f.month}` : selectedYear;
   const works = sortWorksDesc(db.works.filter(w =>
     (!f.vineyardId || w.vineyardId === f.vineyardId) &&
     (!f.activityId || w.activityId === f.activityId) &&
-    w.date.startsWith(f.month ? `${selectedYear}-${f.month}` : selectedYear) &&
+    inPeriod(w, period) &&
     (!f.status || (f.status === 'planned') === isPlanned(w))
   ));
-  const hours = works.filter(w => !isPlanned(w)).reduce((s, w) => s + workHours(w), 0);
+  const hours = works.filter(w => !isPlanned(w)).reduce((s, w) => s + workHours(w) * periodShare(w, period), 0);
   return `
     <div class="page-head">
       <h1>Práce ${selectedYear}</h1>
@@ -476,14 +507,14 @@ function renderVineyards() {
   const rows = sortByName(db.vineyards).map(v => {
     const works = db.works.filter(w => w.vineyardId === v.id && !isPlanned(w));
     const last = sortWorksDesc(works)[0];
-    const hours = works.filter(inYear).reduce((s, w) => s + workHours(w), 0);
+    const hours = works.reduce((s, w) => s + workHours(w) * periodShare(w, selectedYear), 0);
     const phi = phiInfo(v.id);
     return `
       <li class="item" data-action="go" data-href="#/vinice/${v.id}">
         <div class="item-main">
           <div class="item-title">${esc(v.name)} ${phi && phi.until > t ? `<span class="badge warn">OL do ${fmtDate(phi.until)}</span>` : ''}</div>
           <div class="item-meta">${[v.area ? `${fmtNum(v.area, 4)} ha` : '', esc(varietyNames(v)), v.dpb ? `DPB ${esc(v.dpb)}` : ''].filter(Boolean).join(' · ')}</div>
-          <div class="item-meta">${last ? `naposledy: ${esc(activityName(last))} ${fmtDate(last.date)}` : 'zatím bez prací'} · ${yearLabel()} ${fmtNum(hours, 1)} h</div>
+          <div class="item-meta">${last ? `naposledy: ${esc(activityName(last))} ${fmtWorkDate(last)}` : 'zatím bez prací'} · ${yearLabel()} ${fmtNum(hours, 1)} h</div>
         </div>
       </li>`;
   }).join('');
@@ -502,7 +533,7 @@ function renderVineyardDetail(id) {
   const allWorks = db.works.filter(w => w.vineyardId === id);
   const works = sortWorksDesc(allWorks.filter(inYear));
   const doneYear = works.filter(w => !isPlanned(w));
-  const hours = doneYear.reduce((s, w) => s + workHours(w), 0);
+  const hours = doneYear.reduce((s, w) => s + workHours(w) * periodShare(w, selectedYear), 0);
   const sprays = doneYear.filter(w => w.products?.length).length;
   const harvest = doneYear.reduce((s, w) => s + harvestKg(w), 0);
   const harvestTable = renderHarvestByVariety(v, doneYear) + renderHarvestByYear(v, allWorks);
@@ -612,7 +643,7 @@ function renderProducts() {
   const used = {};
   for (const w of db.works) {
     if (isPlanned(w) || !inYear(w)) continue;
-    for (const p of w.products || []) used[p.productId] = (used[p.productId] || 0) + productAmount(w, p);
+    for (const p of w.products || []) used[p.productId] = (used[p.productId] || 0) + productAmount(w, p) * periodShare(w, selectedYear);
   }
   const rows = sortByName(db.products).map(p => {
     const status = productStatus(p);
@@ -655,11 +686,13 @@ function renderWorkers() {
   const prefix = workersPeriod ? `${selectedYear}-${workersPeriod}` : selectedYear;
   const stats = {};
   for (const w of db.works) {
-    if (isPlanned(w) || !w.date.startsWith(prefix)) continue;
+    const share = periodShare(w, prefix);
+    if (isPlanned(w) || !share) continue;
     for (const e of w.workers || []) {
       const s = stats[e.workerId] ??= { hours: 0, byType: {} };
-      s.hours += +e.hours || 0;
-      s.byType[activityName(w)] = (s.byType[activityName(w)] || 0) + (+e.hours || 0);
+      const h = (+e.hours || 0) * share;
+      s.hours += h;
+      s.byType[activityName(w)] = (s.byType[activityName(w)] || 0) + h;
     }
   }
   let totalH = 0, totalCost = 0;
@@ -1094,7 +1127,7 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
   const isNew = !w || copy;
   const src = w || {};
   const data = copy
-    ? { ...structuredClone(src), id: undefined, date: today(), status: 'done' }
+    ? { ...structuredClone(src), id: undefined, date: today(), dateTo: null, status: 'done' }
     : (w || { date: today(), status: planned ? 'planned' : 'done', vineyardId, activityId: selectableActivities()[0]?.id });
 
   if (!db.vineyards.length) {
@@ -1114,13 +1147,16 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
     title: copy ? 'Kopie práce' : isNew ? (data.status === 'planned' ? 'Naplánovat práci' : 'Zapsat práci') : 'Upravit práci',
     body: `
       <div class="grid2">
-        <div class="field"><label>Datum *</label><input type="date" name="date" required value="${data.date}"></div>
+        <div class="field"><label>Datum (od) *</label><input type="date" name="date" required value="${data.date}"></div>
+        <div class="field"><label>Do <span class="muted">(nepovinné)</span></label><input type="date" name="dateTo" value="${data.dateTo ?? ''}" min="${data.date}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Činnost *</label><select name="activityId">${options(selectableActivities(data.activityId), data.activityId)}</select></div>
         <div class="field"><label>Stav</label><select name="status">${options([{ id: 'done', name: 'Provedeno' }, { id: 'planned', name: 'Plánováno' }], data.status)}</select></div>
       </div>
-      <div class="field"><label>Činnost *</label><select name="activityId">${options(selectableActivities(data.activityId), data.activityId)}</select></div>
       ${vineyardField}
       <fieldset>
-        <legend>Pracovníci a hodiny</legend>
+        <legend>Pracovníci a hodiny <span class="small muted">(celkem za celou dobu)</span></legend>
         <div class="rows" id="worker-rows">${(data.workers?.length ? data.workers : [{}]).map(workerRow).join('')}</div>
         <button type="button" class="btn sm" data-action="add-worker-row">+ pracovník</button>
         ${db.workers.length ? '' : '<p class="small muted">Pracovníky přidáš v sekci Lidé.</p>'}
@@ -1152,6 +1188,8 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
       typeSel.addEventListener('change', sync);
       sync();
       form.dataset.workId = isNew ? '' : w.id;
+      const dateFrom = $('[name=date]', form);
+      dateFrom.addEventListener('change', () => { $('[name=dateTo]', form).min = dateFrom.value; });
       refreshHarvestVarieties();
       $$('input[name=vineyards], select[name=vineyardId], input[name=date]', form).forEach(el => el.addEventListener('change', refreshHarvestVarieties));
       // Po výběru přípravku nabídnout jeho povolená použití a předvyplnit dávku.
@@ -1171,6 +1209,7 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
     onSubmit: (get, fd) => {
       const vineyardIds = isNew ? fd.getAll('vineyards') : [get('vineyardId')];
       if (!get('date')) { toast('Vyplň datum.'); return false; }
+      if (get('dateTo') && get('dateTo') < get('date')) { toast('Datum „do“ nesmí být před datem „od“.'); return false; }
       if (!vineyardIds.length || !vineyardIds[0]) { toast('Vyber aspoň jednu vinici.'); return false; }
 
       const activityId = get('activityId');
@@ -1203,7 +1242,8 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
         if (block && block.until > get('date') && !confirm(`Na vinici běží ochranná lhůta do ${fmtDate(block.until)} (${block.product.name}, ošetřeno ${fmtDate(block.date)}). Opravdu zapsat sklizeň?`)) return false;
       }
       const fields = {
-        date: get('date'), status: get('status'), activityId, workers, products,
+        date: get('date'), dateTo: get('dateTo') && get('dateTo') !== get('date') ? get('dateTo') : null,
+        status: get('status'), activityId, workers, products,
         water: hasProducts ? parseNum(get('water')) : null,
         target: hasProducts ? (get('target') || [...new Set(products.map(p => p.pest).filter(Boolean))].join(', ')) : '',
         harvest: kind === 'harvest'
@@ -1351,7 +1391,10 @@ const actions = {
   'complete-work': el => {
     const w = byId(db.works, el.dataset.id);
     w.status = 'done';
-    w.date = today();
+    // Jednodenní práce: dnes. Vícedenní: konec dnes (začátek zůstane, pokud už proběhl).
+    const t = today();
+    if (w.dateTo && w.date < t) w.dateTo = t;
+    else { w.date = t; w.dateTo = null; }
     save(); render();
     toast('Označeno jako provedené.');
   },
@@ -1404,11 +1447,11 @@ const actions = {
   },
   'export-works': () => {
     const year = $('#export-year').value;
-    const rows = [['Datum', 'Stav', 'Vinice', 'Práce', 'Pracovníci', 'Hodiny celkem', 'Přípravky', 'Sklizeň kg', 'Sklizeň po odrůdách', 'Poznámka']];
+    const rows = [['Datum od', 'Datum do', 'Stav', 'Vinice', 'Práce', 'Pracovníci', 'Hodiny celkem', 'Přípravky', 'Sklizeň kg', 'Sklizeň po odrůdách', 'Poznámka']];
     for (const w of sortWorksDesc(db.works).reverse()) {
-      if (!w.date.startsWith(year)) continue;
+      if (!inPeriod(w, year)) continue;
       rows.push([
-        w.date, isPlanned(w) ? 'plán' : 'provedeno', vineyardName(w.vineyardId), activityName(w),
+        w.date, w.dateTo ?? '', isPlanned(w) ? 'plán' : 'provedeno', vineyardName(w.vineyardId), activityName(w),
         (w.workers || []).map(e => `${workerName(e.workerId)} ${fmtNum(e.hours, 1)} h`).join(', '),
         workHours(w), productsSummary(w), harvestKg(w) || '', harvestSummary(w), w.note,
       ]);
@@ -1417,14 +1460,14 @@ const actions = {
   },
   'export-por': () => {
     const year = $('#export-year').value;
-    const rows = [['Datum', 'Vinice', 'Kód DPB', 'Plodina', 'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Reg. číslo', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství', 'Voda l/ha', 'Účel', 'Ochranná lhůta']];
+    const rows = [['Datum od', 'Datum do', 'Vinice', 'Kód DPB', 'Plodina', 'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Reg. číslo', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství', 'Voda l/ha', 'Účel', 'Ochranná lhůta']];
     for (const w of sortWorksDesc(db.works).reverse()) {
-      if (isPlanned(w) || !w.date.startsWith(year)) continue;
+      if (isPlanned(w) || !inPeriod(w, year)) continue;
       const v = byId(db.vineyards, w.vineyardId);
       for (const p of w.products || []) {
         const prod = byId(db.products, p.productId);
         rows.push([
-          w.date, v?.name ?? '', v?.dpb ?? '', 'réva vinná', v?.area ?? '', prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
+          w.date, w.dateTo ?? '', v?.name ?? '', v?.dpb ?? '', 'réva vinná', v?.area ?? '', prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
           p.dose ?? '', prod?.unit ?? '', Math.round(productAmount(w, p) * 1000) / 1000, w.water ?? '', p.pest || w.target,
           p.useId ? p.phi : (prod?.phiDays ?? ''),
         ]);

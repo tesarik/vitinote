@@ -36,6 +36,10 @@ Změny tvaru dat řešit migrací v `normalizeDb()`, která se volá při načte
 
 Plochy jsou v aplikaci v **ha**. Registr vinic je uvádí v m², převádí se při importu.
 
+Práce má `date` (od) a nepovinné `dateTo` (do). V seznamech se zobrazí ve všech obdobích, do kterých zasahuje (`inPeriod`).
+Hodiny, náklady a spotřeba se do měsíců a let rozpočítávají podle dnů (`periodShare`). Pro zobrazení data použij `fmtWorkDate(w)`,
+pro ochrannou lhůtu konec práce (`workEnd`).
+
 Pracovní rok = kalendářní rok data práce. Výběr roku v záhlaví (`selectedYear`, jen v paměti, výchozí letošek) filtruje
 všechny roční údaje. V pohledech používat `inYear(w)` a `yearLabel()` („letos“ / „v roce 2024“), ne `today()`.
 `today()` patří jen k věcem vázaným na dnešek (ochranné lhůty, výchozí datum nové práce).

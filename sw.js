@@ -1,5 +1,5 @@
 // Offline cache: odpovídá z cache, na pozadí stahuje novou verzi (stale-while-revalidate).
-const CACHE = 'vitinote-v7';
+const CACHE = 'vitinote-v8';
 const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon.svg',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 

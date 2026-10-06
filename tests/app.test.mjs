@@ -463,6 +463,63 @@ test('sklizeň v ochranné lhůtě: upozornění ve formuláři a potvrzení', (
   },
 }));
 
+test('vícedenní práce: zobrazení rozsahu, rozpočítání hodin do měsíců a let, kontrola dat', () => withApp(async ({ page, readData }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await page.selectOption('#year', '2025');
+
+  // Zápis rozsahem: „do“ před „od“ se odmítne.
+  await page.click('.topbar [data-action=new-work]');
+  await page.check('input[name=vineyards] >> nth=0');
+  await page.fill('[name=date]', '2025-03-10');
+  await page.fill('[name=dateTo]', '2025-03-08');
+  await page.click('#dlg button[type=submit]');
+  assert.ok(await page.evaluate(() => document.querySelector('#dlg').open));
+  await page.fill('[name=dateTo]', '2025-03-12');
+  await page.selectOption('[name=w-id]', { label: 'Jan' });
+  await page.fill('[name=w-hours]', '9');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(readData().works.find(w => w.date === '2025-03-10').dateTo, '2025-03-12');
+
+  // Řez 28. 1. – 3. 2. (7 dní, 14 h) → leden 8 h, únor 6 h.
+  await page.goto(base + '#/prace');
+  assert.match(await text(page, '.list'), /28\. 1\. – 3\. 2\. 2025 · 14 h/);
+  assert.match(await text(page, '.list'), /10\.–12\. 3\. 2025 · 9 h/);
+  await page.selectOption('[data-filter=month]', '02');
+  assert.equal(await text(page, 'main p.muted'), '1 záznamů · 6 odpracovaných hodin');
+
+  await page.goto(base + '#/pracovnici');
+  await page.selectOption('[data-filter=workersPeriod]', '01');
+  assert.match(await text(page, 'tfoot'), /Celkem 12 2 400 Kč/, 'leden: 8 h z řezu + 4 h z práce přes přelom roku');
+  await page.selectOption('[data-filter=workersPeriod]', '02');
+  assert.match(await text(page, 'tfoot'), /Celkem 6 1 200 Kč/);
+
+  // Práce přes přelom roku (30. 12. 2024 – 2. 1. 2025, 8 h) se objeví v obou letech, hodiny napůl.
+  await page.selectOption('[data-filter=workersPeriod]', '');
+  assert.match(await text(page, 'tfoot'), /Celkem 27 /, '14 + 9 + 4 h');
+  await page.selectOption('#year', '2024');
+  await page.goto(base + '#/prace');
+  assert.equal(await text(page, 'main p.muted'), '1 záznamů · 4 odpracovaných hodin');
+
+  // Dokončení naplánované vícedenní práce: konec dnes, začátek zůstane.
+  await page.selectOption('#year', '2025');
+  await page.click('[data-action=complete-work]');
+  await saved(page);
+  const done = readData().works.find(w => w.id === 'plan');
+  assert.deepEqual([done.status, done.date, done.dateTo], ['done', '2025-06-01', isoDaysAgo(0)]);
+}, {
+  initialData: {
+    version: 1, products: [],
+    workers: [{ id: 'p1', name: 'Jan', rate: 200 }],
+    vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [] }],
+    works: [
+      { id: 'a', vineyardId: 'v1', date: '2025-01-28', dateTo: '2025-02-03', type: 'Řez', status: 'done', workers: [{ workerId: 'p1', hours: 14 }], products: [] },
+      { id: 'b', vineyardId: 'v1', date: '2024-12-30', dateTo: '2025-01-02', type: 'Řez', status: 'done', workers: [{ workerId: 'p1', hours: 8 }], products: [] },
+      { id: 'plan', vineyardId: 'v1', date: '2025-06-01', dateTo: '2099-06-05', type: 'Vázání', status: 'planned', workers: [], products: [] },
+    ],
+  },
+}));
+
 test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
   const manifest = await (await fetch(server.url + 'manifest.webmanifest')).json();
   const sizes = manifest.icons.filter(i => i.type === 'image/png').map(i => `${i.sizes} ${i.purpose}`);
