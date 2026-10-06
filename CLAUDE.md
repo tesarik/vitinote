@@ -1,7 +1,16 @@
 # VitiNote
 
-Evidence prací ve vinicích (vinice a odrůdy, deník prací, postřiky s ochrannými lhůtami,
-pracovníci a hodiny). Pro jednoho uživatele, UI i texty jsou česky.
+Evidence prací ve vinicích pro jednoho vinaře: vinice a odrůdy, pozemky v přípravě na výsadbu, deník prací
+(číselník činností, vícedenní práce), postřiky s přípravky z registru ÚKZÚZ a ochrannými lhůtami, sklizeň po odrůdách,
+pracovníci a hodiny, výběr pracovního roku, import vinic z Registru vinic, exporty CSV (deník, evidence POR).
+UI i texty jsou česky.
+
+## Spolupráce
+
+- S uživatelem komunikovat česky, commit zprávy česky.
+- Commitovat po dokončení změny; `git push` až po souhlasu uživatele (repo je veřejné: github.com/tesarik/vitinote).
+- Před pushem zkontrolovat, že v diffu nejsou skutečná data uživatele (viz Testy).
+- Změny ověřovat testy (`npm test` v `tests/`) a u UI i snímkem obrazovky na šířce telefonu (~375 px).
 
 ## Spuštění
 
@@ -36,12 +45,16 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
 
 ### Data
 
-Jeden JSON objekt `{ version: 1, activities, vineyards, workers, products, works }`:
+Jeden JSON objekt `{ version: 1, migrated, activities, vineyards, workers, products, works }`:
 - hlavní úložiště: soubor na disku přes `server.py` (výchozí `data/vitinote.json`),
 - kopie v `localStorage` (`vitinote:v1`) pro okamžité načtení a offline režim. Neodeslané změny označuje příznak `vitinote:dirty`.
 
 Každá změna dat: upravit `db` → `save()` (zapíše lokálně a odešle na server) → `render()`.
 Změny tvaru dat řešit migrací v `normalizeDb()`, která se volá při načtení z localStorage, ze serveru i z importu zálohy.
+Migrace musí být idempotentní. Pokud mění data, která může uživatel později sám upravit (např. jména vinic), musí proběhnout
+jen jednou: zaznamenat ji v `db.migrated` (např. `regNoNames`) a v `emptyDb()` ji rovnou označit jako hotovou.
+
+Vinice: `{ id, name, alias?, area (ha), varieties, regNo?, ku?, parcels?, dpb?, plantedYear?, plantedDate?, note, stage? }`.
 
 Pozemek v přípravě na výsadbu je vinice se `stage: 'preparation'` (`isPrep`), navíc má `plannedPlanting` (YYYY-MM) a plánované
 odrůdy s `rootstock` a `vines`. Nepočítá se do výměry vinic. Akce Vysadit (`plantForm`) smaže `stage` a nastaví `plantedDate`, práce zůstanou.
@@ -62,27 +75,36 @@ všechny roční údaje. V pohledech používat `inYear(w)` a `yearLabel()` („
 Činnosti jsou číselník `activities: [{ id, name, kind: 'work'|'spray'|'harvest', hidden }]` (pořadí = pořadí v poli).
 Práce na ně odkazuje přes `activityId`. Formulář práce se řídí podle `kind`, nikdy podle názvu činnosti.
 Id výchozích a převedených činností je odvozené z názvu (`activityIdFor`), aby převod na dvou zařízeních dal stejná id.
+Výchozí seznam určil uživatel (zelené práce rozepsané na jednotlivé činnosti). Staré názvy převádí `LEGACY_ACTIVITY_NAMES`,
+zrušené zůstávají skryté (`RETIRED_ACTIVITY_NAMES`).
 
 Přípravek propojený s registrem má `regNo` a kopii `uses`, `validTo`, `useTo`… (`porFields`). Při aktualizaci registru se obnoví.
 Řádek postřiku s vybraným použitím si ukládá `useId, pest, phi, phiDays`, aby se historie neměnila s registrem.
 Ochranná lhůta řádku: podle použití (`AT`/`-` = bez pevné lhůty), jinak podle `phiDays` přípravku (`rowPhiDays`).
+Platnost z registru: `validTo` konec povolení ≤ `sellTo` doprodej ≤ `useTo` spotřeba zásob. Postřik po `useTo` vyžaduje potvrzení,
+stejně jako sklizeň během běžící ochranné lhůty.
 
 Sklizeň je u práce seznam `harvest: [{ variety, kg, sugar }]`. Prázdné `variety` znamená celou vinici.
-Odrůdy vinice jsou `varieties: [{ name, area, year, code?, vines?, training? }]` a stejná odrůda může být víckrát (různé roky výsadby).
+Odrůdy vinice jsou `varieties: [{ name, area, year, rootstock?, vines?, code?, training? }]` a stejná odrůda může být víckrát
+(různé roky výsadby). Formulář ukazuje jen část polí podle stavu (`VARIETY_FIELDS`), ostatní zachová v `data-extra`.
 
 ### Konvence
 
 - Každou hodnotu vkládanou do HTML escapovat přes `esc()`.
 - Formuláře: `openForm({ title, body, onSubmit, onDelete, onInit })`. Když `onSubmit` nebo `onDelete` vrátí `false`, dialog zůstane otevřený a nic se neuloží.
-- Čísla od uživatele parsovat přes `parseNum()` (přijímá desetinnou čárku), zobrazovat přes `fmtNum()` (český formát).
+- Čísla od uživatele parsovat přes `parseNum()` (přijímá desetinnou čárku), zobrazovat přes `fmtNum()` (český formát),
+  do polí formuláře předvyplňovat přes `numVal()` (desetinná čárka).
 - Datumy se ukládají jako ISO `YYYY-MM-DD` v lokálním čase (`today()`, `toISO()`), nikdy jako `toISOString()` (UTC posun).
 - Komentáře a texty v UI česky.
+- CSV exporty přes `toCsv()` (středník, BOM, desetinná čárka – pro český Excel).
+- `select` má vlastní šipku jako `background-image` – u selectů nepoužívat zkratku `background:`, jen `background-color`.
+- Potvrzovací otázky přes `confirm()` (testy je zachytávají přes `dialogs` / `answerDialogs()` z `withApp`).
 
 ## Testy
 
 ```sh
 cd tests && npm install
-CHROME_PATH=/usr/bin/google-chrome npm test   # nebo jednorázově: npx playwright install chromium && npm test
+CHROME_PATH=/usr/bin/google-chrome npm test   # na tomto stroji nutné; jinde: npx playwright install chromium && npm test
 # npm test spouští i python3 -m unittest test_por_registry
 ```
 
@@ -99,6 +121,15 @@ Před pushem zkontrolovat: `git grep -n -E "<reg. čísla a tratě uživatele>"`
 `parseRegistryXml()` čte XML z Portálu farmáře (`RV > SUBJEKT > VINICE > SKLADBA / PAROVANIDPB`).
 `PLOCHA` je ve `VINICE` i ve `SKLADBA`, proto se čtou jen přímí potomci (`kids()`).
 Vinice se párují podle `regNo` a u ručně založených vinic podle kódu bloku v DPB. Údaje o subjektu (IČO, adresa) se nikdy neukládají.
+
+## Zjištěno a odloženo
+
+- Odkaz z kódu DPB přímo na díl v mapě (2026-10): veřejný LPIS (mze.gov.cz …/plpis) nemá parametr v URL pro otevření dílu,
+  jeho vyhledávací REST anonymně vrací 403. Veřejná vrstva agrigis.gov.cz `Data_INSPIRE/LPIS` identifikuje díly jiným číslem
+  (`828112607/2`), ne čtvercem a kódem. Uživatel to nechal být; neoficiální rozhraní nepoužívat.
+- Návrhy, které zatím nebyly zadané: elektronická evidence POR podle nař. EU 2023/564 (nejdřív ověřit český formát),
+  ošetřená plocha u postřiku, hlídání max. počtu aplikací, BBCH u postřiku, sklad přípravků, náklady, stroje, datované zálohy,
+  heslo pro `--lan`.
 
 ## Na co myslet
 
