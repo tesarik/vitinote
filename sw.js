@@ -1,6 +1,7 @@
 // Offline cache: odpovídá z cache, na pozadí stahuje novou verzi (stale-while-revalidate).
-const CACHE = 'vitinote-v3';
-const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'vitinote-v4';
+const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon.svg',
+  './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

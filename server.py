@@ -19,7 +19,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 APP_DIR = Path(__file__).resolve().parent
-STATIC_FILES = {'/', '/index.html', '/style.css', '/app.js', '/sw.js', '/manifest.webmanifest', '/icon.svg'}
+STATIC_FILES = {'/', '/index.html', '/style.css', '/app.js', '/sw.js', '/manifest.webmanifest', '/icon.svg',
+                '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'}
 MAX_BODY = 20 * 1024 * 1024
 write_lock = threading.Lock()
 

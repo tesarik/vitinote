@@ -1,0 +1,231 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { join } from 'node:path';
+import { withApp, startServer, saved, addVineyard, closeBrowser, FIXTURES } from './helpers.mjs';
+
+after(closeBrowser);
+
+// Soubor se čte asynchronně – počkat, až se otevře náhled.
+async function importRegistry(page) {
+  await page.setInputFiles('[data-import-rv]', join(FIXTURES, 'registr-vinic.xml'));
+  await page.waitForSelector('#dlg[open] input[name=rv]');
+}
+
+const text = async (page, sel) => (await page.innerText(sel)).replace(/\s+/g, ' ').trim();
+
+async function addWorker(page, name, rate) {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/pracovnici');
+  await page.click('.page-head [data-action=new-worker]');
+  await page.fill('[name=name]', name);
+  await page.fill('[name=rate]', rate);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+}
+
+async function addProduct(page, name, { phi = '', dose = '' } = {}) {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/pripravky');
+  await page.click('.page-head [data-action=new-product]');
+  await page.fill('[name=name]', name);
+  await page.fill('[name=phiDays]', phi);
+  await page.fill('[name=defaultDose]', dose);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+}
+
+test('vinice: přidání s odrůdami, úprava a smazání z detailu', () => withApp(async ({ page, readData }) => {
+  await addVineyard(page, { name: 'Pod lesem', area: '1,25', varieties: [{ name: 'Pálava', area: '0,5' }, { name: 'Sauvignon' }] });
+  let v = readData().vineyards[0];
+  assert.equal(v.area, 1.25);
+  assert.deepEqual(v.varieties.map(x => [x.name, x.area]), [['Pálava', 0.5], ['Sauvignon', null]]);
+
+  await page.click('.list .item');
+  await page.click('[data-action=edit-vineyard]');
+  await page.fill('[name=name]', 'Pod lesem horní');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(readData().vineyards[0].name, 'Pod lesem horní');
+
+  await page.click('main [data-action=delete-vineyard]');
+  await saved(page);
+  assert.equal(await page.evaluate(() => location.hash), '#/vinice');
+  assert.equal(readData().vineyards.length, 0);
+}));
+
+test('postřik do dvou vinic: hodiny, náklady, spotřeba a ochranná lhůta', () => withApp(async ({ page, readData }) => {
+  await addVineyard(page, { name: 'A', area: '1,2' });
+  await addVineyard(page, { name: 'B', area: '0,8' });
+  await addWorker(page, 'Jan', '200');
+  await addProduct(page, 'Kuprikol', { phi: '21', dose: '2,5' });
+
+  await page.click('.topbar [data-action=new-work]');
+  await page.selectOption('[name=type]', 'Postřik');
+  await page.check('input[name=vineyards] >> nth=0');
+  await page.check('input[name=vineyards] >> nth=1');
+  await page.selectOption('[name=w-id]', { label: 'Jan' });
+  await page.fill('[name=w-hours]', '3');
+  await page.selectOption('[name=p-id]', { label: 'Kuprikol' });
+  assert.equal(await page.inputValue('[name=p-dose]'), '2,5', 'obvyklá dávka se předvyplní');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+
+  assert.equal(readData().works.length, 2);
+  await page.goto(page.url().replace(/#.*$/, '') + '#/pracovnici');
+  assert.match(await text(page, 'tfoot'), /Celkem 6 1 200 Kč/);
+
+  await page.goto(page.url().replace(/#.*$/, '') + '#/pripravky');
+  assert.match(await text(page, '.list'), /letos spotřebováno 5 l/, '2,5 l/ha × (1,2 + 0,8) ha');
+
+  await page.goto(page.url().replace(/#.*$/, '') + '#/');
+  assert.match(await text(page, 'main'), /Běžící ochranné lhůty.*ještě 21 dní/);
+}));
+
+test('tlačítko + Práce v záhlaví předvybere vinici z detailu', () => withApp(async ({ page }) => {
+  await addVineyard(page, { name: 'Alfa' });
+  await addVineyard(page, { name: 'Beta' });
+  await page.getByText('Beta', { exact: true }).click();
+  await page.click('.topbar [data-action=new-work]');
+  const checked = await page.$$eval('input[name=vineyards]:checked', els => els.map(e => e.parentElement.textContent.trim()));
+  assert.deepEqual(checked, ['Beta']);
+}));
+
+test('sklizeň po odrůdách a souhrn v detailu vinice', () => withApp(async ({ page, readData }) => {
+  await addVineyard(page, { name: 'A', area: '1', varieties: [{ name: 'Pálava', area: '0,4' }, { name: 'Sauvignon', area: '0,6' }] });
+  await addVineyard(page, { name: 'B' });
+  const id = readData().vineyards.find(v => v.name === 'A').id;
+
+  // Sklizeň do dvou vinic najednou se odmítne.
+  await page.click('.topbar [data-action=new-work]');
+  await page.selectOption('[name=type]', 'Sklizeň');
+  await page.check('input[name=vineyards] >> nth=0');
+  await page.check('input[name=vineyards] >> nth=1');
+  await page.click('#dlg button[type=submit]');
+  assert.ok(await page.evaluate(() => document.querySelector('#dlg').open), 'dialog zůstane otevřený');
+  await page.click('#dlg [data-action=close-dialog] >> nth=0');
+
+  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice/' + id);
+  await page.click('main [data-action=new-work]');
+  await page.selectOption('[name=type]', 'Sklizeň');
+  const opts = await page.$$eval('select[name=h-variety] option', o => o.map(x => x.textContent));
+  assert.deepEqual(opts, ['— celá vinice —', 'Pálava', 'Sauvignon']);
+  await page.selectOption('.row-harvest >> nth=0 >> select', 'Pálava');
+  await page.fill('.row-harvest >> nth=0 >> [name=h-kg]', '2000');
+  await page.fill('.row-harvest >> nth=0 >> [name=h-sugar]', '22');
+  await page.click('[data-action=add-harvest-row]');
+  await page.selectOption('.row-harvest >> nth=1 >> select', 'Sauvignon');
+  await page.fill('.row-harvest >> nth=1 >> [name=h-kg]', '3000');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+
+  const w = readData().works[0];
+  assert.deepEqual(w.harvest, [{ variety: 'Pálava', kg: 2000, sugar: 22 }, { variety: 'Sauvignon', kg: 3000, sugar: null }]);
+  const table = await text(page, 'main table');
+  assert.match(table, /Pálava 2 000 5 22/, '2 t z 0,4 ha = 5 t/ha');
+  assert.match(table, /Sauvignon 3 000 5 –/);
+}));
+
+test('starší data se převedou (odrůda jako text, sklizeň jedním číslem)', () => withApp(async ({ page }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice/v1');
+  assert.match(await text(page, '.kv'), /Odrůdy Ryzlink.*Veltlín/);
+  assert.match(await text(page, 'main'), /celá vinice 1 500 kg 20 °NM/);
+}, {
+  initialData: {
+    version: 1, workers: [], products: [],
+    vineyards: [{ id: 'v1', name: 'Stará', area: 1, variety: 'Ryzlink, Veltlín' }],
+    works: [{ id: 'w1', vineyardId: 'v1', date: '2025-09-20', type: 'Sklizeň', status: 'done', workers: [], products: [], harvestKg: 1500, sugar: 20 }],
+  },
+}));
+
+test('import z Registru vinic: náhled, uložení, párování podle DPB a opakovaný import', () => withApp(async ({ page, readData }) => {
+  // Ručně založená vinice se stejným blokem DPB se má spárovat, ne zdvojit.
+  await addVineyard(page, { name: 'Moje stráň' });
+  await page.click('.list .item');
+  await page.click('[data-action=edit-vineyard]');
+  await page.fill('[name=dpb]', '0202/3');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+
+  await page.goto(page.url().replace(/#.*$/, '') + '#/nastaveni');
+  await importRegistry(page);
+  assert.equal(await page.textContent('#dlg-title'), 'Import z Registru vinic (2)');
+  assert.deepEqual(await page.$$eval('#dlg .item-title .badge', b => b.map(x => x.textContent)), ['nová', 'aktualizace']);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+
+  const data = readData();
+  assert.equal(data.vineyards.length, 2);
+  const za = data.vineyards.find(v => v.regNo === '999999/0001');
+  assert.equal(za.name, 'Za humny 0001');
+  assert.equal(za.area, 0.25);
+  assert.equal(za.dpb, '600-1100 0101/1');
+  assert.equal(za.plantedYear, '2005–2019');
+  assert.equal(za.varieties.length, 3);
+  assert.deepEqual(za.varieties[0], { name: 'Ryzlink rýnský', code: 'VIT00032', area: 0.1, year: '2005', vines: 400, training: 'Střední' });
+  const matched = data.vineyards.find(v => v.regNo === '999999/0002');
+  assert.equal(matched.name, 'Moje stráň', 'název ručně založené vinice zůstane');
+  assert.equal(matched.area, 0.12);
+  const raw = JSON.stringify(data);
+  assert.ok(!raw.includes('12345678') && !raw.includes('Testovací vinařství'), 'údaje o subjektu se neukládají');
+
+  // Uložení přes formulář nesmí změnit data z registru → opakovaný import je „beze změny“.
+  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice/' + za.id);
+  await page.click('[data-action=edit-vineyard]');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  await page.goto(page.url().replace(/#.*$/, '') + '#/nastaveni');
+  await importRegistry(page);
+  assert.deepEqual(await page.$$eval('#dlg .item-title .badge', b => b.map(x => x.textContent)), ['beze změny', 'beze změny']);
+  assert.equal(await page.$$eval('#dlg input[name=rv]:checked', c => c.length), 0);
+}));
+
+test('ukládání na disk: jiný prohlížeč vidí data, výpadek serveru se dorovná', () => withApp(async ({ page, server, readData, newPage }) => {
+  await addVineyard(page, { name: 'Sdílená' });
+  const other = await newPage();
+  await other.goto(server.url + '#/vinice');
+  await other.waitForSelector('.list .item');
+  assert.match(await text(other, '.list'), /Sdílená/);
+
+  await server.stop();
+  await addVineyard(page, { name: 'Offline' }, { wait: false });
+  await page.waitForSelector('#sync[data-state=local]', { state: 'attached' });
+  assert.ok(!readData().vineyards.some(v => v.name === 'Offline'));
+
+  const restarted = await startServer({ port: server.port, dataFile: server.dataFile });
+  server.stop = restarted.stop; // ať withApp ukončí nový proces
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await saved(page);
+  assert.ok(readData().vineyards.some(v => v.name === 'Offline'));
+}));
+
+test('pozdní odpověď serveru nepřepíše novější místní změnu', () => withApp(async ({ page, readData }) => {
+  await addVineyard(page, { name: 'První' });
+  // Zdržet načtení dat ze serveru (stará verze) až za uložení nové vinice.
+  let release;
+  const gate = new Promise(r => { release = r; });
+  await page.route('**/api/data', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    await gate;
+    await route.fulfill({ response });
+  });
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await addVineyard(page, { name: 'Druhá' });
+  release();
+  await page.waitForTimeout(300);
+  await page.unroute('**/api/data');
+
+  const local = await page.evaluate(() => JSON.parse(localStorage.getItem('vitinote:v1')).vineyards.map(v => v.name));
+  assert.deepEqual(local.sort(), ['Druhá', 'První']);
+  assert.deepEqual(readData().vineyards.map(v => v.name).sort(), ['Druhá', 'První']);
+  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice');
+  assert.match(await text(page, '.list'), /Druhá/);
+}));
+
+test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
+  const manifest = await (await fetch(server.url + 'manifest.webmanifest')).json();
+  const sizes = manifest.icons.filter(i => i.type === 'image/png').map(i => `${i.sizes} ${i.purpose}`);
+  assert.deepEqual(sizes, ['192x192 any', '512x512 any', '512x512 maskable']);
+  for (const src of [...manifest.icons.map(i => i.src), 'apple-touch-icon.png']) {
+    const res = await fetch(server.url + src);
+    assert.equal(res.status, 200, src);
+  }
+}));

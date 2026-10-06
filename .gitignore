@@ -6,3 +6,6 @@ temp/
 # Python
 __pycache__/
 *.pyc
+
+# Testy
+node_modules/

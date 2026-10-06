@@ -12,7 +12,8 @@ bin/vitinote --no-open --port 8765 --data /tmp/test.json   # pro testování s o
 
 ## Architektura
 
-Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepřidávat npm, frameworky ani pip balíčky bez domluvy.
+Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepřidávat do aplikace npm, frameworky ani pip balíčky bez domluvy
+(Playwright je jen vývojová závislost v `tests/`).
 
 - `index.html` – kostra, navigace, jediný `<dialog>` pro všechny formuláře.
 - `app.js` – celá aplikace. Pohledy jsou funkce `render*()` vracející HTML string, router podle `location.hash`
@@ -32,6 +33,9 @@ Změny tvaru dat řešit migrací v `normalizeDb()`, která se volá při načte
 
 Plochy jsou v aplikaci v **ha**. Registr vinic je uvádí v m², převádí se při importu.
 
+Sklizeň je u práce seznam `harvest: [{ variety, kg, sugar }]`. Prázdné `variety` znamená celou vinici.
+Odrůdy vinice jsou `varieties: [{ name, area, year, code?, vines?, training? }]` a stejná odrůda může být víckrát (různé roky výsadby).
+
 ### Konvence
 
 - Každou hodnotu vkládanou do HTML escapovat přes `esc()`.
@@ -39,6 +43,19 @@ Plochy jsou v aplikaci v **ha**. Registr vinic je uvádí v m², převádí se p
 - Čísla od uživatele parsovat přes `parseNum()` (přijímá desetinnou čárku), zobrazovat přes `fmtNum()` (český formát).
 - Datumy se ukládají jako ISO `YYYY-MM-DD` v lokálním čase (`today()`, `toISO()`), nikdy jako `toISOString()` (UTC posun).
 - Komentáře a texty v UI česky.
+
+## Testy
+
+```sh
+cd tests && npm install
+CHROME_PATH=/usr/bin/google-chrome npm test   # nebo jednorázově: npx playwright install chromium && npm test
+```
+
+`tests/app.test.mjs` (node:test + Playwright) prochází aplikaci v prohlížeči proti `server.py`.
+Každý test má vlastní server s dočasným datovým souborem (`withApp()` v `tests/helpers.mjs`), skutečných dat se nedotýká.
+Po změně chování přidat nebo upravit test. Po uložení čekat na `saved(page)` (stav synchronizace „disk“),
+po asynchronních akcích (import souboru) čekat na výsledek v DOM, ne na pevný čas.
+Fixture `tests/fixtures/registr-vinic.xml` je smyšlená. Nikdy do testů nedávat skutečný výpis z registru.
 
 ## Import z Registru vinic
 
@@ -51,4 +68,4 @@ Vinice se párují podle `regNo` a u ručně založených vinic podle kódu blok
 - Při změně souborů aplikace zvýšit `CACHE` v `sw.js` (`vitinote-vN`), jinak se klientům může držet stará verze.
 - Nový statický soubor přidat do `STATIC_FILES` v `server.py` i do `ASSETS` v `sw.js`.
 - `temp/` a `data/` obsahují skutečná data uživatele a jsou v `.gitignore`. Nikdy je necommitovat. Repo je veřejné.
-- Testy zatím nejsou. Změny ověřovat v prohlížeči proti serveru s dočasným `--data` souborem, ne nad skutečnými daty.
+- Ikony PNG se generují z `icon.svg` příkazem `npm run icons` v `tests/`. Po změně `icon.svg` je přegenerovat.

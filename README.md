@@ -37,4 +37,16 @@ Bez skriptu (např. ve Windows): `python3 server.py`.
 - Prohlížeč si drží kopii v localStorage. Když server neběží, změny se ukládají jen tam
   (v záhlaví svítí „Jen v prohlížeči“) a na disk se odešlou, jakmile je server znovu dostupný.
 
-V sekci **Data** je záloha a obnova (JSON) a exporty do CSV (deník prací, evidence POR a hnojiv).
+V sekci **Data** je záloha a obnova (JSON) a exporty do CSV (deník prací, evidence POR a hnojiv)
+a import vinic z Registru vinic (XML z Portálu farmáře).
+
+## Testy
+
+Testy běží v prohlížeči přes Playwright (jen pro vývoj, aplikace sama nic neinstaluje):
+
+```sh
+cd tests
+npm install
+npx playwright install chromium      # jednou; nebo použij systémový Chrome:
+CHROME_PATH=/usr/bin/google-chrome npm test
+```

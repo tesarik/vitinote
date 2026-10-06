@@ -1,0 +1,13 @@
+{
+  "name": "vitinote-tests",
+  "private": true,
+  "type": "module",
+  "description": "Testy VitiNote v prohlížeči (Playwright). Aplikace sama žádné závislosti nemá.",
+  "scripts": {
+    "test": "node --test --test-concurrency=4",
+    "icons": "node make-icons.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

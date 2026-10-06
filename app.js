@@ -18,6 +18,14 @@ function normalizeDb(d) {
     }
     delete v.variety;
   }
+  // Sklizeň: jedno množství na práci → seznam po odrůdách.
+  for (const w of d.works) {
+    if (!Array.isArray(w.harvest)) {
+      w.harvest = w.harvestKg != null || w.sugar != null ? [{ variety: '', kg: w.harvestKg ?? null, sugar: w.sugar ?? null }] : [];
+    }
+    delete w.harvestKg;
+    delete w.sugar;
+  }
   return d;
 }
 
@@ -64,7 +72,11 @@ function setSync(state, res) {
   if (location.hash.startsWith('#/nastaveni') && !dlg.open) render();
 }
 
+// Počítadlo místních změn: odpověď serveru, která dorazí až po nich, je zastaralá.
+let localChanges = 0;
+
 function save() {
+  localChanges++;
   writeLocal();
   setDirty(true);
   pushToServer();
@@ -97,8 +109,11 @@ async function pushToServer() {
 async function pullFromServer() {
   if (pushing || dlg.open) return;
   if (isDirty()) return pushToServer();
+  const changesBefore = localChanges;
   try {
     const res = await fetch(API_URL, { cache: 'no-store' });
+    // Mezitím se uložila místní změna → nepřepisovat ji starší verzí ze serveru.
+    if (localChanges !== changesBefore) return;
     if (res.status === 404 && res.headers.get('Content-Type')?.includes('json')) {
       // Soubor zatím neexistuje → založíme ho z dat v prohlížeči.
       setDirty(true);
@@ -106,7 +121,7 @@ async function pullFromServer() {
     }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = normalizeDb(await res.json());
-    if (dlg.open) return;
+    if (dlg.open || localChanges !== changesBefore) return;
     const isEmpty = d => !d.vineyards.length && !d.works.length && !d.workers.length && !d.products.length;
     if (isEmpty(data) && !isEmpty(db)) {
       // Prázdný soubor nesmí přemazat data, která už jsou v prohlížeči.
@@ -147,6 +162,10 @@ const isPlanned = w => w.status === 'planned';
 const vineyardName = id => byId(db.vineyards, id)?.name ?? '(smazaná vinice)';
 const workerName = id => byId(db.workers, id)?.name ?? '(smazaný)';
 const varietyNames = v => [...new Set((v.varieties || []).map(x => x.name))].join(', ');
+const harvestKg = w => (w.harvest || []).reduce((s, h) => s + (+h.kg || 0), 0);
+const harvestSummary = w => (w.harvest || []).map(h => [
+  h.variety || 'celá vinice', h.kg ? `${fmtNum(h.kg, 0)} kg` : '', h.sugar ? `${fmtNum(h.sugar, 1)} °NM` : '',
+].filter(Boolean).join(' ')).join(', ');
 const workHours = w => (w.workers || []).reduce((s, e) => s + (+e.hours || 0), 0);
 
 function toast(msg) {
@@ -213,8 +232,7 @@ function workItem(w, { showVineyard = true } = {}) {
     fmtDate(w.date),
     hours ? `${fmtNum(hours, 1)} h${people ? ` (${esc(people)})` : ''}` : (people ? esc(people) : ''),
     w.products?.length ? esc(productsSummary(w)) : '',
-    w.harvestKg ? `${fmtNum(w.harvestKg, 0)} kg` : '',
-    w.sugar ? `${fmtNum(w.sugar, 1)} °NM` : '',
+    w.harvest?.length ? esc(harvestSummary(w)) : '',
   ].filter(Boolean).join(' · ');
   return `
     <li class="item" data-action="edit-work" data-id="${w.id}">
@@ -364,7 +382,8 @@ function renderVineyardDetail(id) {
   const doneYear = works.filter(w => !isPlanned(w) && w.date.startsWith(year));
   const hours = doneYear.reduce((s, w) => s + workHours(w), 0);
   const sprays = doneYear.filter(w => w.products?.length).length;
-  const harvest = doneYear.reduce((s, w) => s + (+w.harvestKg || 0), 0);
+  const harvest = doneYear.reduce((s, w) => s + harvestKg(w), 0);
+  const harvestTable = renderHarvestByVariety(v, doneYear);
   const phi = phiInfo(id);
 
   return `
@@ -398,9 +417,42 @@ function renderVineyardDetail(id) {
       <div class="stat"><div class="v">${sprays}</div><div class="l">ošetření letos</div></div>
       ${harvest ? `<div class="stat"><div class="v">${fmtNum(harvest, 0)} kg</div><div class="l">sklizeno letos${v.area ? ` (${fmtNum(harvest / v.area / 1000)} t/ha)` : ''}</div></div>` : ''}
     </div>
+    ${harvestTable}
     <div class="card">
       <h2>Historie prací</h2>
       ${workList(works, { showVineyard: false })}
+    </div>`;
+}
+
+// Letošní sklizeň vinice po odrůdách: kg, t/ha (z plochy odrůdy) a průměrná cukernatost vážená množstvím.
+function renderHarvestByVariety(v, works) {
+  const rows = new Map();
+  for (const w of works) {
+    for (const h of w.harvest || []) {
+      const r = rows.get(h.variety) ?? { kg: 0, sugarKg: 0, sugarBase: 0 };
+      r.kg += +h.kg || 0;
+      if (h.sugar && h.kg) { r.sugarKg += h.sugar * h.kg; r.sugarBase += +h.kg; }
+      rows.set(h.variety, r);
+    }
+  }
+  if (!rows.size) return '';
+  const areaOf = name => (v.varieties || []).filter(x => x.name === name).reduce((s, x) => s + (+x.area || 0), 0);
+  const body = [...rows].sort(([a], [b]) => a.localeCompare(b, 'cs')).map(([name, r]) => {
+    const area = name ? areaOf(name) : (+v.area || 0);
+    return `<tr>
+      <td>${esc(name || 'celá vinice')}</td>
+      <td class="num">${fmtNum(r.kg, 0)}</td>
+      <td class="num">${area && r.kg ? fmtNum(r.kg / area / 1000) : '–'}</td>
+      <td class="num">${r.sugarBase ? fmtNum(r.sugarKg / r.sugarBase, 1) : '–'}</td>
+    </tr>`;
+  }).join('');
+  return `
+    <div class="card">
+      <h2>Sklizeň ${today().slice(0, 4)}</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Odrůda</th><th class="num">kg</th><th class="num">t/ha</th><th class="num">°NM</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
     </div>`;
 }
 
@@ -720,6 +772,35 @@ const productRow = (p = {}) => `
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
   </div>`;
 
+const harvestRow = (h = {}, names = []) => `
+  <div class="row row-harvest">
+    <select name="h-variety" aria-label="Odrůda" style="flex:3">${harvestVarietyOptions(names, h.variety)}</select>
+    <input name="h-kg" inputmode="decimal" placeholder="kg" value="${h.kg ?? ''}" aria-label="Množství (kg)">
+    <input name="h-sugar" inputmode="decimal" placeholder="°NM" value="${h.sugar ?? ''}" aria-label="Cukernatost (°NM)">
+    <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
+  </div>`;
+
+const harvestVarietyOptions = (names, selected = '') =>
+  options(selected && !names.includes(selected) ? [...names, selected] : names, selected, { empty: '— celá vinice —' });
+
+// Vinice vybrané v otevřeném formuláři práce (nová práce: zaškrtávátka, úprava: select).
+function formVineyardIds() {
+  const sel = $('select[name=vineyardId]', form);
+  return sel ? [sel.value] : $$('input[name=vineyards]:checked', form).map(c => c.value);
+}
+
+function formVarietyNames() {
+  const ids = formVineyardIds();
+  if (ids.length !== 1) return [];
+  return [...new Set((byId(db.vineyards, ids[0])?.varieties || []).map(x => x.name))];
+}
+
+function refreshHarvestVarieties() {
+  const names = formVarietyNames();
+  $$('select[name=h-variety]', form).forEach(sel => { sel.innerHTML = harvestVarietyOptions(names, sel.value); });
+  $('#harvest-hint').textContent = formVineyardIds().length > 1 ? 'Sklizeň zapisuj pro každou vinici zvlášť – vyber jen jednu.' : '';
+}
+
 function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
   const isNew = !w || copy;
   const src = w || {};
@@ -766,11 +847,10 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
         ${db.products.length ? '' : '<p class="small muted">Přípravky přidáš v sekci Přípravky.</p>'}
       </fieldset>
       <fieldset id="harvest-section">
-        <legend>Sklizeň</legend>
-        <div class="grid2">
-          <div class="field"><label>Množství (kg)</label><input name="harvestKg" inputmode="decimal" value="${data.harvestKg ?? ''}"></div>
-          <div class="field"><label>Cukernatost (°NM)</label><input name="sugar" inputmode="decimal" value="${data.sugar ?? ''}"></div>
-        </div>
+        <legend>Sklizeň <span class="small muted">(odrůda, kg, °NM)</span></legend>
+        <div class="rows" id="harvest-rows">${(data.harvest?.length ? data.harvest : [{}]).map(h => harvestRow(h)).join('')}</div>
+        <button type="button" class="btn sm" data-action="add-harvest-row">+ odrůda</button>
+        <p class="small muted" id="harvest-hint"></p>
       </fieldset>
       <div class="field"><label>Poznámka</label><textarea name="note">${esc(data.note)}</textarea></div>`,
     onInit: () => {
@@ -781,6 +861,8 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
       };
       typeSel.addEventListener('change', sync);
       sync();
+      refreshHarvestVarieties();
+      $$('input[name=vineyards], select[name=vineyardId]', form).forEach(el => el.addEventListener('change', refreshHarvestVarieties));
       // Předvyplnění obvyklé dávky po výběru přípravku.
       $('#product-rows').addEventListener('change', e => {
         if (e.target.name !== 'p-id') return;
@@ -795,6 +877,7 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
       if (!vineyardIds.length || !vineyardIds[0]) { toast('Vyber aspoň jednu vinici.'); return false; }
 
       const type = get('type');
+      if (type === 'Sklizeň' && vineyardIds.length > 1) { toast('Sklizeň zapisuj pro každou vinici zvlášť.'); return false; }
       const workers = $$('.row-worker', form)
         .map(r => ({ workerId: $('[name=w-id]', r).value, hours: parseNum($('[name=w-hours]', r).value) }))
         .filter(e => e.workerId);
@@ -808,8 +891,11 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
         date: get('date'), status: get('status'), type, workers, products,
         water: hasProducts ? parseNum(get('water')) : null,
         target: hasProducts ? get('target') : '',
-        harvestKg: type === 'Sklizeň' ? parseNum(get('harvestKg')) : null,
-        sugar: type === 'Sklizeň' ? parseNum(get('sugar')) : null,
+        harvest: type === 'Sklizeň'
+          ? $$('.row-harvest', form)
+              .map(r => ({ variety: $('[name=h-variety]', r).value, kg: parseNum($('[name=h-kg]', r).value), sugar: parseNum($('[name=h-sugar]', r).value) }))
+              .filter(h => h.kg != null || h.sugar != null)
+          : [],
         note: get('note'),
       };
 
@@ -932,7 +1018,11 @@ function importRegistryPreview(list) {
 const actions = {
   'go': el => { location.hash = el.dataset.href; },
   'close-dialog': closeForm,
-  'new-work': el => workForm(null, { vineyardId: el.dataset.vineyard || '', planned: !!el.dataset.planned }),
+  // Bez data-vineyard (tlačítko v záhlaví) se v detailu vinice předvybere ta vinice.
+  'new-work': el => workForm(null, {
+    vineyardId: el.dataset.vineyard || location.hash.match(/^#\/vinice\/(.+)/)?.[1] || '',
+    planned: !!el.dataset.planned,
+  }),
   'edit-work': el => workForm(byId(db.works, el.dataset.id)),
   'copy-work': el => workForm(byId(db.works, el.dataset.id), { copy: true }),
   'complete-work': el => {
@@ -954,6 +1044,7 @@ const actions = {
   'edit-product': el => productForm(byId(db.products, el.dataset.id)),
   'add-worker-row': () => $('#worker-rows').insertAdjacentHTML('beforeend', workerRow()),
   'add-variety-row': () => $('#variety-rows').insertAdjacentHTML('beforeend', varietyRow()),
+  'add-harvest-row': () => $('#harvest-rows').insertAdjacentHTML('beforeend', harvestRow({}, formVarietyNames())),
   'add-product-row': () => $('#product-rows').insertAdjacentHTML('beforeend', productRow()),
   'remove-row': el => el.closest('.row').remove(),
   'rv-check': el => $$('input[name=rv]', form).forEach(c => { c.checked = !!el.dataset.on; }),
@@ -963,13 +1054,13 @@ const actions = {
   },
   'export-works': () => {
     const year = $('#export-year').value;
-    const rows = [['Datum', 'Stav', 'Vinice', 'Práce', 'Pracovníci', 'Hodiny celkem', 'Přípravky', 'Sklizeň kg', '°NM', 'Poznámka']];
+    const rows = [['Datum', 'Stav', 'Vinice', 'Práce', 'Pracovníci', 'Hodiny celkem', 'Přípravky', 'Sklizeň kg', 'Sklizeň po odrůdách', 'Poznámka']];
     for (const w of sortWorksDesc(db.works).reverse()) {
       if (!w.date.startsWith(year)) continue;
       rows.push([
         w.date, isPlanned(w) ? 'plán' : 'provedeno', vineyardName(w.vineyardId), w.type,
         (w.workers || []).map(e => `${workerName(e.workerId)} ${fmtNum(e.hours, 1)} h`).join(', '),
-        workHours(w), productsSummary(w), w.harvestKg ?? '', w.sugar ?? '', w.note,
+        workHours(w), productsSummary(w), harvestKg(w) || '', harvestSummary(w), w.note,
       ]);
     }
     download(`vitinote-prace-${year}.csv`, toCsv(rows), 'text/csv;charset=utf-8');
