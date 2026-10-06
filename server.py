@@ -113,7 +113,7 @@ def main():
     host = '0.0.0.0' if args.lan else '127.0.0.1'
     server = ThreadingHTTPServer((host, args.port), partial(Handler, directory=str(APP_DIR)))
     print(f'VitiNote běží na http://localhost:{args.port}' + (' (i v místní síti)' if args.lan else ''))
-    print(f'Data: {Handler.data_file}')
+    print(f'Data: {Handler.data_file}', flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Spustí VitiNote a otevře ho v prohlížeči.
+#
+#   bin/vitinote                 # http://localhost:8000
+#   bin/vitinote --lan           # přístup i z telefonu ve stejné síti
+#   bin/vitinote --port 9000 --data ~/vinarstvi/vitinote.json
+#   bin/vitinote --no-open       # neotevírat prohlížeč
+#
+# Ostatní parametry se předají server.py (viz python3 server.py --help).
+set -euo pipefail
+
+# Skutečné umístění skriptu i při spuštění přes symlink (např. z ~/.local/bin).
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" != /* ]] && src="$dir/$src"
+done
+APP_DIR="$(cd -P "$(dirname "$src")/.." && pwd)"
+
+open_browser=1
+port=8000
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-open) open_browser=0 ;;
+    --port) port="${2:?--port vyžaduje číslo}"; args+=("$1" "$2"); shift ;;
+    --port=*) port="${1#--port=}"; args+=("$1") ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+
+if ! command -v python3 >/dev/null; then
+  echo "VitiNote potřebuje Python 3 (příkaz python3 nebyl nalezen)." >&2
+  exit 1
+fi
+
+if [ "$open_browser" = 1 ]; then
+  url="http://localhost:$port/"
+  (
+    # Počkat, až server naběhne, pak otevřít prohlížeč.
+    for _ in $(seq 1 50); do
+      if python3 -c "import urllib.request,sys; urllib.request.urlopen(sys.argv[1], timeout=0.2)" "$url" 2>/dev/null; then
+        if command -v xdg-open >/dev/null; then xdg-open "$url" >/dev/null 2>&1
+        elif command -v open >/dev/null; then open "$url"
+        fi
+        exit 0
+      fi
+      sleep 0.2
+    done
+  ) &
+fi
+
+exec python3 "$APP_DIR/server.py" ${args[@]+"${args[@]}"}

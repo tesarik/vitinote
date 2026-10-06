@@ -5,13 +5,30 @@ sklizeň…), přípravky s ochrannými lhůtami, pracovníci a odpracované hod
 
 ## Spuštění
 
+Potřebuje jen Python 3 (žádné další balíčky).
+
 ```sh
-python3 server.py            # http://localhost:8000
-python3 server.py --lan      # dostupné i z telefonu ve stejné Wi-Fi
-python3 server.py --data ~/vinarstvi/vitinote.json --port 9000
+git clone https://github.com/tesarik/vitinote.git
+cd vitinote
+bin/vitinote                 # spustí server a otevře http://localhost:8000
 ```
 
-Potřebuje jen Python 3 (žádné další balíčky).
+Parametry:
+
+```sh
+bin/vitinote --lan           # dostupné i z telefonu ve stejné Wi-Fi
+bin/vitinote --port 9000     # jiný port
+bin/vitinote --data ~/vinarstvi/vitinote.json   # jiné umístění dat
+bin/vitinote --no-open       # neotevírat prohlížeč
+```
+
+Aby šel příkaz `vitinote` spouštět odkudkoli:
+
+```sh
+ln -s "$PWD/bin/vitinote" ~/.local/bin/vitinote
+```
+
+Bez skriptu (např. ve Windows): `python3 server.py`.
 
 ## Kde jsou data
 
