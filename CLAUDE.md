@@ -37,6 +37,8 @@ Změny tvaru dat řešit migrací v `normalizeDb()`, která se volá při načte
 Pozemek v přípravě na výsadbu je vinice se `stage: 'preparation'` (`isPrep`), navíc má `plannedPlanting` (YYYY-MM) a plánované
 odrůdy s `rootstock` a `vines`. Nepočítá se do výměry vinic. Akce Vysadit (`plantForm`) smaže `stage` a nastaví `plantedDate`, práce zůstanou.
 Seznamy vinic pro výběr ber přes `workPlaces()` / `plantedVineyards()`, ne přímo `db.vineyards`.
+Vinice má výchozí název `name` (z importu: trať + celé reg. číslo) a nepovinný vlastní `alias`. Pro zobrazení vždy `vName(v)`,
+pro řazení `sortVineyards()`. Import mění jen údaje z registru, nikdy `name` ani `alias` existující vinice.
 
 Plochy jsou v aplikaci v **ha**. Registr vinic je uvádí v m², převádí se při importu.
 

@@ -159,6 +159,8 @@ legend { font-weight: 700; font-size: .9rem; padding: 0 4px; }
 .item-main { min-width: 0; flex: 1; }
 .item-title { font-weight: 600; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .item-meta { font-size: .85rem; color: var(--muted); }
+.item-sub { font-size: .8rem; color: var(--muted); margin-top: -2px; }
+.subtitle { margin: 2px 0 0; font-size: .9rem; color: var(--muted); }
 .item-note { font-size: .85rem; margin-top: 2px; white-space: pre-wrap; }
 .item-actions { display: flex; gap: 6px; flex-shrink: 0; }
 

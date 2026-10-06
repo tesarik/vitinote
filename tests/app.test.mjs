@@ -620,6 +620,41 @@ test('jména vinic z dřívějšího importu se doplní na celé reg. číslo, v
   },
 }));
 
+test('vlastní název vinice: hlavní jméno všude, výchozí název menším písmem, import ho nepřepíše', () => withApp(async ({ page, readData }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await page.goto(base + '#/vinice/v1');
+  await page.click('[data-action=edit-vineyard]');
+  assert.equal(await page.getAttribute('[name=alias]', 'placeholder'), 'Na stráni 999999/0002');
+  await page.fill('[name=alias]', 'U sklepa');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(await text(page, 'main h1'), 'U sklepa');
+  assert.equal(await text(page, 'main .subtitle'), 'Na stráni 999999/0002');
+
+  await page.goto(base + '#/vinice');
+  assert.match(await text(page, '.list'), /U sklepa Na stráni 999999\/0002/);
+  await page.click('.topbar [data-action=new-work]');
+  assert.deepEqual(await page.$$eval('input[name=vineyards]', e => e.map(x => x.parentElement.textContent.trim())), ['U sklepa']);
+  await page.check('input[name=vineyards]');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  await page.goto(base + '#/prace');
+  assert.match(await text(page, '.list'), /U sklepa/);
+
+  // Opakovaný import vlastní název zachová, výchozí název taky.
+  await page.goto(base + '#/nastaveni');
+  await importRegistry(page);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  const v = readData().vineyards.find(x => x.id === 'v1');
+  assert.deepEqual([v.alias, v.name], ['U sklepa', 'Na stráni 999999/0002']);
+}, {
+  initialData: {
+    version: 1, workers: [], products: [], works: [],
+    vineyards: [{ id: 'v1', name: 'Na stráni 999999/0002', regNo: '999999/0002', varieties: [] }],
+  },
+}));
+
 test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
   const manifest = await (await fetch(server.url + 'manifest.webmanifest')).json();
   const sizes = manifest.icons.filter(i => i.type === 'image/png').map(i => `${i.sizes} ${i.purpose}`);
