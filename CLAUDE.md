@@ -16,10 +16,19 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
 (Playwright je jen vývojová závislost v `tests/`).
 
 - `index.html` – kostra, navigace, jediný `<dialog>` pro všechny formuláře.
-- `app.js` – celá aplikace. Pohledy jsou funkce `render*()` vracející HTML string, router podle `location.hash`
-  (`#/vinice/<id>` …), akce přes delegované `data-action` atributy → objekt `actions`.
+- `js/` – aplikace jako nativní ES moduly (načítá je `index.html` přes `js/main.js`, žádný bundler):
+  - `util.js` obecné helpery (`$`, `esc`, datumy, `fmtNum`/`parseNum`, `options`, CSV) – nezávisí na ničem dalším,
+  - `data.js` datový model, `normalizeDb` (převody starších dat), stav `db` a doménová logika (období, ochranné lhůty…),
+  - `storage.js` localStorage + synchronizace se serverem (`save`, `pullFromServer`),
+  - `registry-por.js` registr přípravků ÚKZÚZ, `view-state.js` vybraný rok a filtry,
+  - `views.js` stránky (`render*()` vrací HTML string) a router podle `location.hash` (`#/vinice/<id>` …),
+  - `dialog.js` jediný dialog (`openForm`), `forms/*.js` jednotlivé formuláře, `import-registr-vinic.js`,
+  - `actions.js` akce přes delegované `data-action` atributy a obsluha událostí, `main.js` spuštění.
+  Sdílený stav (`db`, `selectedYear`, `workersPeriod`) se z jiných modulů jen čte; přepisuje se přes setter
+  ve vlastním modulu (`setDb`, `setYear`, `setWorkersPeriod`). Posluchače událostí se registrují v `init*()` volaných z `main.js`,
+  ne při importu. Cyklické importy (např. storage ↔ views) jsou v pořádku, dokud se importované funkce volají až za běhu.
 - `style.css` – barvy jako CSS proměnné na `:root`, tmavý režim přes `prefers-color-scheme`. Mobile-first.
-- `server.py` – obsluhuje jen soubory ze seznamu `STATIC_FILES`, `GET/PUT /api/data` a registr přípravků (`GET /api/por`,
+- `server.py` – obsluhuje jen soubory ze seznamu `STATIC_FILES` a moduly `js/**.js`, `GET/PUT /api/data` a registr přípravků (`GET /api/por`,
   `POST /api/por/update`). Zápis je atomický, předchozí verze dat jako `.bak`.
 - `por_registry.py` – z exportu registru přípravků ÚKZÚZ (~100 MB XML, stahování trvá 1–3 min) vytáhne povolené přípravky
   s použitím pro révu do `por-reva.json` vedle datového souboru. Testy používají `--por-source tests/fixtures/registr-por.xml`.
@@ -94,6 +103,7 @@ Vinice se párují podle `regNo` a u ručně založených vinic podle kódu blok
 ## Na co myslet
 
 - Při změně souborů aplikace zvýšit `CACHE` v `sw.js` (`vitinote-vN`), jinak se klientům může držet stará verze.
-- Nový statický soubor přidat do `STATIC_FILES` v `server.py` i do `ASSETS` v `sw.js`.
+- Nový statický soubor přidat do `STATIC_FILES` v `server.py` i do `ASSETS` v `sw.js`. Nový modul v `js/` stačí přidat do `ASSETS`
+  (test „offline cache“ to hlídá).
 - `temp/` a `data/` obsahují skutečná data uživatele a jsou v `.gitignore`. Nikdy je necommitovat. Repo je veřejné.
 - Ikony PNG se generují z `icon.svg` příkazem `npm run icons` v `tests/`. Po změně `icon.svg` je přegenerovat.

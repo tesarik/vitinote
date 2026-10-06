@@ -15,6 +15,7 @@ API:
 import argparse
 import json
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -26,8 +27,9 @@ from urllib.parse import quote
 import por_registry
 
 APP_DIR = Path(__file__).resolve().parent
-STATIC_FILES = {'/', '/index.html', '/style.css', '/app.js', '/sw.js', '/manifest.webmanifest', '/icon.svg',
+STATIC_FILES = {'/', '/index.html', '/style.css', '/sw.js', '/manifest.webmanifest', '/icon.svg',
                 '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'}
+STATIC_MODULES = re.compile(r'^/js/(forms/)?[a-z0-9-]+\.js$')   # ES moduly aplikace
 MAX_BODY = 20 * 1024 * 1024
 write_lock = threading.Lock()
 por_lock = threading.Lock()
@@ -47,7 +49,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_data()
         if path == '/api/por':
             return self.send_file_json(self.por_file, 'registr zatím nebyl stažen')
-        if path not in STATIC_FILES:
+        if path not in STATIC_FILES and not STATIC_MODULES.match(path):
             return self.send_error(404)
         super().do_GET()
 

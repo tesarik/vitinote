@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { withApp, startServer, saved, addVineyard, closeBrowser, FIXTURES } from './helpers.mjs';
+import { withApp, startServer, saved, addVineyard, closeBrowser, FIXTURES, APP_DIR } from './helpers.mjs';
 
 after(closeBrowser);
 
@@ -653,6 +653,19 @@ test('vlastní název vinice: hlavní jméno všude, výchozí název menším p
     version: 1, workers: [], products: [], works: [],
     vineyards: [{ id: 'v1', name: 'Na stráni 999999/0002', regNo: '999999/0002', varieties: [] }],
   },
+}));
+
+test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');
+  const assets = [...sw.match(/const ASSETS = \[([\s\S]*?)\];/)[1].matchAll(/'\.\/([^']*)'/g)].map(m => m[1]);
+  const modules = readdirSync(join(APP_DIR, 'js'), { recursive: true }).filter(f => f.endsWith('.js')).map(f => `js/${f}`);
+  for (const m of modules) assert.ok(assets.includes(m), `${m} chybí v ASSETS v sw.js`);
+  for (const a of assets) {
+    const res = await fetch(server.url + a);
+    assert.equal(res.status, 200, a);
+    if (a.endsWith('.js')) assert.match(res.headers.get('content-type'), /javascript/, a);
+  }
 }));
 
 test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
