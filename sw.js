@@ -1,5 +1,5 @@
 // Offline cache: odpovídá z cache, na pozadí stahuje novou verzi (stale-while-revalidate).
-const CACHE = 'vitinote-v2';
+const CACHE = 'vitinote-v3';
 const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {

@@ -372,6 +372,7 @@ function renderVineyardDetail(id) {
     <div class="page-head">
       <h1>${esc(v.name)}</h1>
       <div class="actions-row">
+        <button class="btn danger" data-action="delete-vineyard" data-id="${v.id}">Smazat</button>
         <button class="btn" data-action="edit-vineyard" data-id="${v.id}">Upravit</button>
         <button class="btn primary" data-action="new-work" data-vineyard="${v.id}">+ Práce</button>
       </div>
@@ -633,14 +634,18 @@ function vineyardForm(v) {
       });
       if (isNew) { v.id = uid(); db.vineyards.push(v); toast('Vinice přidána.'); }
     },
-    onDelete: isNew ? null : () => {
-      const n = db.works.filter(w => w.vineyardId === v.id).length;
-      if (!confirm(n ? `Smazat vinici „${v.name}“ včetně ${n} záznamů prací?` : `Smazat vinici „${v.name}“?`)) return false;
-      db.vineyards = db.vineyards.filter(x => x.id !== v.id);
-      db.works = db.works.filter(w => w.vineyardId !== v.id);
-      if (location.hash.includes(v.id)) location.hash = '#/vinice';
-    },
+    onDelete: isNew ? null : () => deleteVineyard(v),
   });
+}
+
+// Smaže vinici včetně jejích prací; vrací false, pokud uživatel nepotvrdil (konvence onDelete).
+function deleteVineyard(v) {
+  const n = db.works.filter(w => w.vineyardId === v.id).length;
+  if (!confirm(n ? `Smazat vinici „${v.name}“ včetně ${n} záznamů prací?` : `Smazat vinici „${v.name}“?`)) return false;
+  db.vineyards = db.vineyards.filter(x => x.id !== v.id);
+  db.works = db.works.filter(w => w.vineyardId !== v.id);
+  if (location.hash.includes(v.id)) location.hash = '#/vinice';
+  toast('Vinice smazána.');
 }
 
 /* ----- Worker ----- */
@@ -939,6 +944,10 @@ const actions = {
   },
   'new-vineyard': () => vineyardForm(),
   'edit-vineyard': el => vineyardForm(byId(db.vineyards, el.dataset.id)),
+  'delete-vineyard': el => {
+    if (deleteVineyard(byId(db.vineyards, el.dataset.id)) === false) return;
+    save(); render();
+  },
   'new-worker': () => workerForm(),
   'edit-worker': el => workerForm(byId(db.workers, el.dataset.id)),
   'new-product': () => productForm(),
