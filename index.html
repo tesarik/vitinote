@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#6b1d3a">
+  <meta name="description" content="Evidence prací ve vinicích – řez, zelené práce, postřiky, sklizeň, hodiny pracovníků.">
+  <title>VitiNote</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand"><img src="icon.svg" alt="" width="28" height="28"> VitiNote</a>
+    <span class="topbar-right">
+      <a href="#/nastaveni" id="sync" class="sync" data-state="pending"></a>
+      <button class="btn primary" data-action="new-work">+ Práce</button>
+    </span>
+  </header>
+
+  <nav class="nav" id="nav">
+    <a href="#/" data-page="">Přehled</a>
+    <a href="#/prace" data-page="prace">Práce</a>
+    <a href="#/vinice" data-page="vinice">Vinice</a>
+    <a href="#/pripravky" data-page="pripravky">Přípravky</a>
+    <a href="#/pracovnici" data-page="pracovnici">Lidé</a>
+    <a href="#/nastaveni" data-page="nastaveni">Data</a>
+  </nav>
+
+  <main id="main"></main>
+
+  <dialog id="dlg">
+    <form id="dlg-form" novalidate>
+      <header class="dlg-head">
+        <h2 id="dlg-title"></h2>
+        <button type="button" class="icon-btn" data-action="close-dialog" aria-label="Zavřít">✕</button>
+      </header>
+      <div id="dlg-body" class="dlg-body"></div>
+      <footer class="dlg-foot">
+        <button type="button" class="btn danger" id="dlg-delete" hidden>Smazat</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-action="close-dialog">Zrušit</button>
+        <button type="submit" class="btn primary">Uložit</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

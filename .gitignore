@@ -1,0 +1,8 @@
+# Data aplikace a podklady s osobními/firemními údaji
+data/
+temp/
+*.bak
+
+# Python
+__pycache__/
+*.pyc

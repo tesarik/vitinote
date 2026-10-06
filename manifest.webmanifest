@@ -1,0 +1,14 @@
+{
+  "name": "VitiNote – práce ve vinicích",
+  "short_name": "VitiNote",
+  "description": "Evidence prací ve vinicích, postřiků a odpracovaných hodin.",
+  "lang": "cs",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf7f5",
+  "theme_color": "#6b1d3a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
