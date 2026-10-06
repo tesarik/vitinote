@@ -178,11 +178,17 @@ const daysBetween = (a, b) => Math.round((new Date(b + 'T00:00:00') - new Date(a
 const fmtDate = iso => { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${+d}. ${+m}. ${y}`; };
 const fmtMonth = ym => { const [y, m] = ym.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' }); };
 const fmtNum = (v, digits = 2) => (+v || 0).toLocaleString('cs-CZ', { maximumFractionDigits: digits });
+// Číslo do pole formuláře s desetinnou čárkou (parseNum přijímá obojí).
+const numVal = v => (v == null ? '' : String(v).replace('.', ','));
 const parseNum = v => { const n = parseFloat(String(v ?? '').replace(',', '.').replace(/\s/g, '')); return Number.isFinite(n) ? n : null; };
 const byId = (list, id) => list.find(x => x.id === id);
 const sortByName = list => [...list].sort((a, b) => a.name.localeCompare(b.name, 'cs'));
 const isPlanned = w => w.status === 'planned';
 
+// Pozemek v přípravě na výsadbu je vinice se stage 'preparation'; vysazená vinice stage nemá.
+const isPrep = v => v?.stage === 'preparation';
+const plantedVineyards = () => db.vineyards.filter(v => !isPrep(v));
+const placeLabel = v => (isPrep(v) ? 'pozemek' : 'vinici');
 const vineyardName = id => byId(db.vineyards, id)?.name ?? '(smazaná vinice)';
 const workerName = id => byId(db.workers, id)?.name ?? '(smazaný)';
 const varietyNames = v => [...new Set((v.varieties || []).map(x => x.name))].join(', ');
@@ -422,7 +428,8 @@ function renderDashboard() {
   const t = today();
   const done = db.works.filter(w => !isPlanned(w));
   const planned = db.works.filter(isPlanned).sort((a, b) => a.date.localeCompare(b.date));
-  const area = db.vineyards.reduce((s, v) => s + (+v.area || 0), 0);
+  const area = plantedVineyards().reduce((s, v) => s + (+v.area || 0), 0);
+  const prep = db.vineyards.filter(isPrep);
   const isCurrent = selectedYear === currentYear();
   // Letos: hodiny za aktuální měsíc; v minulých letech za celý rok.
   const hoursShown = done.reduce((s, w) => s + workHours(w) * periodShare(w, isCurrent ? thisMonth() : selectedYear), 0);
@@ -444,8 +451,9 @@ function renderDashboard() {
 
   return `
     <div class="stats">
-      <div class="stat"><div class="v">${db.vineyards.length}</div><div class="l">vinic</div></div>
-      <div class="stat"><div class="v">${fmtNum(area)} ha</div><div class="l">celková výměra</div></div>
+      <div class="stat"><div class="v">${plantedVineyards().length}</div><div class="l">vinic</div></div>
+      <div class="stat"><div class="v">${fmtNum(area)} ha</div><div class="l">celková výměra vinic</div></div>
+      ${prep.length ? `<div class="stat"><div class="v">${prep.length}</div><div class="l">pozemků v přípravě (${fmtNum(prep.reduce((s, v) => s + (+v.area || 0), 0))} ha)</div></div>` : ''}
       <div class="stat"><div class="v">${fmtNum(hoursShown, 1)} h</div><div class="l">odpracováno ${isCurrent ? 'tento měsíc' : yearLabel()}</div></div>
       <div class="stat"><div class="v">${worksYear}</div><div class="l">prací ${yearLabel()}</div></div>
     </div>
@@ -504,7 +512,7 @@ function renderWorks() {
 
 function renderVineyards() {
   const t = today();
-  const rows = sortByName(db.vineyards).map(v => {
+  const row = v => {
     const works = db.works.filter(w => w.vineyardId === v.id && !isPlanned(w));
     const last = sortWorksDesc(works)[0];
     const hours = works.reduce((s, w) => s + workHours(w) * periodShare(w, selectedYear), 0);
@@ -513,17 +521,29 @@ function renderVineyards() {
       <li class="item" data-action="go" data-href="#/vinice/${v.id}">
         <div class="item-main">
           <div class="item-title">${esc(v.name)} ${phi && phi.until > t ? `<span class="badge warn">OL do ${fmtDate(phi.until)}</span>` : ''}</div>
-          <div class="item-meta">${[v.area ? `${fmtNum(v.area, 4)} ha` : '', esc(varietyNames(v)), v.dpb ? `DPB ${esc(v.dpb)}` : ''].filter(Boolean).join(' · ')}</div>
+          <div class="item-meta">${[
+            v.area ? `${fmtNum(v.area, 4)} ha` : '',
+            isPrep(v) && v.plannedPlanting ? `výsadba ${esc(fmtMonth(v.plannedPlanting))}` : '',
+            esc(varietyNames(v)),
+            v.dpb ? `DPB ${esc(v.dpb)}` : '',
+            isPrep(v) && v.parcels ? `parc. ${esc(v.parcels)}` : '',
+          ].filter(Boolean).join(' · ')}</div>
           <div class="item-meta">${last ? `naposledy: ${esc(activityName(last))} ${fmtWorkDate(last)}` : 'zatím bez prací'} · ${yearLabel()} ${fmtNum(hours, 1)} h</div>
         </div>
       </li>`;
-  }).join('');
+  };
+  const planted = sortByName(plantedVineyards()).map(row).join('');
+  const prep = sortByName(db.vineyards.filter(isPrep)).map(row).join('');
   return `
     <div class="page-head">
       <h1>Vinice</h1>
       <button class="btn primary" data-action="new-vineyard">+ Přidat vinici</button>
     </div>
-    <div class="card">${rows ? `<ul class="list">${rows}</ul>` : '<p class="empty">Zatím žádné vinice.</p>'}</div>`;
+    <div class="card">${planted ? `<ul class="list">${planted}</ul>` : '<p class="empty">Zatím žádné vinice.</p>'}</div>
+    <div class="card">
+      <div class="page-head"><h2>V přípravě na výsadbu</h2><button class="btn sm" data-action="new-prep">+ Pozemek v přípravě</button></div>
+      ${prep ? `<ul class="list">${prep}</ul>` : '<p class="small muted">Pozemky, které připravuješ k výsadbě. Zapisuješ k nim práce a po výsadbě je jedním tlačítkem změníš na vinici.</p>'}
+    </div>`;
 }
 
 function renderVineyardDetail(id) {
@@ -542,20 +562,25 @@ function renderVineyardDetail(id) {
   return `
     <p><a href="#/vinice">← Vinice</a></p>
     <div class="page-head">
-      <h1>${esc(v.name)}</h1>
+      <h1>${esc(v.name)} ${isPrep(v) ? '<span class="badge planned">v přípravě na výsadbu</span>' : ''}</h1>
       <div class="actions-row">
         <button class="btn danger" data-action="delete-vineyard" data-id="${v.id}">Smazat</button>
         <button class="btn" data-action="edit-vineyard" data-id="${v.id}">Upravit</button>
+        ${isPrep(v) ? `<button class="btn ok" data-action="plant-vineyard" data-id="${v.id}">Vysadit</button>` : ''}
         <button class="btn primary" data-action="new-work" data-vineyard="${v.id}">+ Práce</button>
       </div>
     </div>
     <div class="card">
       <dl class="kv">
         ${v.area ? `<dt>Výměra</dt><dd>${fmtNum(v.area, 4)} ha</dd>` : ''}
-        ${v.varieties?.length ? `<dt>${v.varieties.length > 1 ? 'Odrůdy' : 'Odrůda'}</dt><dd>${v.varieties
-          .map(x => esc(x.name) + ` <span class="muted small">${[x.year, x.area ? `${fmtNum(x.area, 4)} ha` : '', x.vines ? `${fmtNum(x.vines, 0)} keřů` : '']
-            .filter(Boolean).join(' · ')}</span>`).join('<br>')}</dd>` : ''}
-        ${v.plantedYear ? `<dt>Výsadba</dt><dd>${esc(v.plantedYear)}</dd>` : ''}
+        ${isPrep(v) ? `<dt>Plánovaná výsadba</dt><dd>${v.plannedPlanting ? esc(fmtMonth(v.plannedPlanting)) : '–'}</dd>` : ''}
+        ${v.varieties?.length ? `<dt>${isPrep(v) ? 'Plánované odrůdy' : v.varieties.length > 1 ? 'Odrůdy' : 'Odrůda'}</dt><dd>${v.varieties
+          .map(x => esc(x.name) + ` <span class="muted small">${[
+            x.year, x.area ? `${fmtNum(x.area, 4)} ha` : '', x.rootstock ? `podnož ${x.rootstock}` : '',
+            x.vines ? `${fmtNum(x.vines, 0)} ${isPrep(v) ? 'sazenic' : 'keřů'}` : '',
+          ].filter(Boolean).map(esc).join(' · ')}</span>`).join('<br>')}</dd>` : ''}
+        ${v.plantedDate ? `<dt>Výsadba</dt><dd>${fmtDate(v.plantedDate)}</dd>` : v.plantedYear ? `<dt>Výsadba</dt><dd>${esc(v.plantedYear)}</dd>` : ''}
+        ${v.parcels ? `<dt>Parcely</dt><dd>${esc(v.parcels)}</dd>` : ''}
         ${v.regNo ? `<dt>Reg. číslo</dt><dd>${esc(v.regNo)}</dd>` : ''}
         ${v.ku ? `<dt>Katastr</dt><dd>${esc(v.ku)}</dd>` : ''}
         ${v.dpb ? `<dt>Kód DPB</dt><dd>${esc(v.dpb)}</dd>` : ''}
@@ -859,65 +884,108 @@ $('#dlg-delete').addEventListener('click', () => {
 
 /* ----- Vineyard ----- */
 
-// Kód odrůdy, počet keřů a vedení přicházejí z Registru vinic; ve formuláři se jen zachovají.
-const varietyRow = (x = {}) => `
-  <div class="row row-variety" data-extra="${esc(JSON.stringify({ code: x.code, vines: x.vines, training: x.training }))}">
-    <input name="v-name" value="${esc(x.name)}" placeholder="např. Ryzlink rýnský" aria-label="Odrůda" style="flex:3">
-    <input name="v-area" inputmode="decimal" value="${x.area ?? ''}" placeholder="ha" aria-label="Výměra odrůdy (ha)">
-    <input name="v-year" inputmode="numeric" value="${esc(x.year)}" placeholder="rok" aria-label="Rok výsadby">
+// Pole řádku odrůdy podle stavu: [klíč, popisek, číselné?]. Ostatní údaje (kód z registru, vedení…) se ve formuláři jen zachovají.
+const VARIETY_FIELDS = {
+  planted: [['area', 'ha', true], ['year', 'rok', false]],
+  preparation: [['area', 'ha', true], ['rootstock', 'podnož', false], ['vines', 'sazenic', true]],
+};
+
+const varietyRow = (x = {}, stage = 'planted') => {
+  const fields = VARIETY_FIELDS[stage];
+  const shown = new Set(['name', ...fields.map(([key]) => key)]);
+  const extra = Object.fromEntries(Object.entries(x).filter(([k]) => !shown.has(k)));
+  return `
+  <div class="row row-variety row-variety-${stage}" data-extra="${esc(JSON.stringify(extra))}">
+    <input name="v-name" value="${esc(x.name)}" placeholder="např. Ryzlink rýnský" aria-label="Odrůda">
+    ${fields.map(([key, label, numeric]) => `<input name="v-${key}" data-numeric="${numeric}"${numeric ? ' inputmode="decimal"' : ''}
+      value="${numeric ? numVal(x[key]) : esc(x[key])}" placeholder="${label}" aria-label="${label}">`).join('')}
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
   </div>`;
+};
 
-function vineyardForm(v) {
+function readVarietyRows() {
+  return $$('.row-variety', form).map(r => {
+    const x = JSON.parse(r.dataset.extra || '{}');
+    x.name = $('[name=v-name]', r).value.trim();
+    for (const input of $$('input[data-numeric]', r)) {
+      x[input.name.slice(2)] = input.dataset.numeric === 'true' ? parseNum(input.value) : input.value.trim();
+    }
+    return x;
+  }).filter(x => x.name);
+}
+
+function vineyardForm(v, { stage = 'planted' } = {}) {
   const isNew = !v;
-  v ||= {};
+  v ||= stage === 'preparation' ? { stage } : {};
+  const prep = isPrep(v);
   openForm({
-    title: isNew ? 'Nová vinice' : 'Upravit vinici',
+    title: prep ? (isNew ? 'Nový pozemek v přípravě' : 'Upravit pozemek v přípravě') : (isNew ? 'Nová vinice' : 'Upravit vinici'),
     body: `
       <div class="field"><label>Název *</label><input name="name" required value="${esc(v.name)}" placeholder="např. Pod lesem"></div>
       <div class="grid2">
-        <div class="field"><label>Výměra (ha)</label><input name="area" inputmode="decimal" value="${v.area ?? ''}"></div>
-        <div class="field"><label>Rok výsadby</label><input name="plantedYear" inputmode="numeric" value="${esc(v.plantedYear)}"></div>
+        <div class="field"><label>Výměra (ha)</label><input name="area" inputmode="decimal" value="${numVal(v.area)}"></div>
+        ${prep
+          ? `<div class="field"><label>Plánovaná výsadba</label><input type="month" name="plannedPlanting" value="${esc(v.plannedPlanting)}"></div>`
+          : `<div class="field"><label>Rok výsadby</label><input name="plantedYear" inputmode="numeric" value="${esc(v.plantedYear)}"></div>`}
       </div>
       <fieldset>
-        <legend>Odrůdy <span class="small muted">(název, ha, rok výsadby)</span></legend>
-        <div class="rows" id="variety-rows">${(v.varieties?.length ? v.varieties : [{}]).map(varietyRow).join('')}</div>
+        <legend>${prep ? 'Plánované odrůdy <span class="small muted">(název, ha, podnož, počet sazenic)</span>' : 'Odrůdy <span class="small muted">(název, ha, rok výsadby)</span>'}</legend>
+        <div class="rows" id="variety-rows">${(v.varieties?.length ? v.varieties : [{}]).map(x => varietyRow(x, prep ? 'preparation' : 'planted')).join('')}</div>
         <button type="button" class="btn sm" data-action="add-variety-row">+ odrůda</button>
       </fieldset>
-      <div class="field"><label>Kód DPB (LPIS)</label><input name="dpb" value="${esc(v.dpb)}" placeholder="pro evidenci POR"></div>
       <div class="grid2">
-        <div class="field"><label>Reg. číslo vinice</label><input name="regNo" value="${esc(v.regNo)}" placeholder="z Registru vinic"></div>
         <div class="field"><label>Katastrální území</label><input name="ku" value="${esc(v.ku)}"></div>
+        <div class="field"><label>Parcely</label><input name="parcels" value="${esc(v.parcels)}" placeholder="např. 1234/5, 1234/6"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Kód DPB (LPIS)</label><input name="dpb" value="${esc(v.dpb)}" placeholder="pro evidenci POR"></div>
+        ${prep ? '' : `<div class="field"><label>Reg. číslo vinice</label><input name="regNo" value="${esc(v.regNo)}" placeholder="z Registru vinic"></div>`}
       </div>
       <div class="field"><label>Poznámka</label><textarea name="note">${esc(v.note)}</textarea></div>`,
+    onInit: () => { form.dataset.stage = prep ? 'preparation' : 'planted'; },
     onSubmit: get => {
-      if (!get('name')) { toast('Vyplň název vinice.'); return false; }
+      if (!get('name')) { toast(prep ? 'Vyplň název pozemku.' : 'Vyplň název vinice.'); return false; }
       Object.assign(v, {
-        name: get('name'), area: parseNum(get('area')), plantedYear: get('plantedYear'),
-        varieties: $$('.row-variety', form)
-          .map(r => ({
-            ...JSON.parse(r.dataset.extra || '{}'),
-            name: $('[name=v-name]', r).value.trim(),
-            area: parseNum($('[name=v-area]', r).value),
-            year: $('[name=v-year]', r).value.trim(),
-          }))
-          .filter(x => x.name),
-        dpb: get('dpb'), regNo: get('regNo'), ku: get('ku'), note: get('note'),
-      });
-      if (isNew) { v.id = uid(); db.vineyards.push(v); toast('Vinice přidána.'); }
+        name: get('name'), area: parseNum(get('area')), varieties: readVarietyRows(),
+        ku: get('ku'), parcels: get('parcels'), dpb: get('dpb'), note: get('note'),
+      }, prep
+        ? { plannedPlanting: get('plannedPlanting') }
+        : { plantedYear: get('plantedYear'), regNo: get('regNo') });
+      if (isNew) { v.id = uid(); db.vineyards.push(v); toast(prep ? 'Pozemek přidán.' : 'Vinice přidána.'); }
     },
     onDelete: isNew ? null : () => deleteVineyard(v),
+  });
+}
+
+// Vysazení: pozemek v přípravě se změní na vinici, práce i odrůdy zůstanou.
+function plantForm(v) {
+  openForm({
+    title: `Vysadit: ${v.name}`,
+    body: `
+      <p class="small muted">Pozemek se změní na vinici. Zapsané práce zůstanou a plánované odrůdy se stanou odrůdami vinice.</p>
+      <div class="field"><label>Datum výsadby *</label><input type="date" name="plantedDate" required value="${today()}"></div>
+      ${v.varieties?.length ? `<p class="small">Odrůdy: ${esc(varietyNames(v))}</p>` : ''}`,
+    onSubmit: get => {
+      const date = get('plantedDate');
+      if (!date) { toast('Vyplň datum výsadby.'); return false; }
+      const year = date.slice(0, 4);
+      v.varieties = (v.varieties || []).map(x => ({ ...x, year: x.year || year }));
+      Object.assign(v, { plantedDate: date, plantedYear: year });
+      delete v.stage;
+      delete v.plannedPlanting;
+      toast(`${v.name} je teď vinice.`);
+    },
   });
 }
 
 // Smaže vinici včetně jejích prací; vrací false, pokud uživatel nepotvrdil (konvence onDelete).
 function deleteVineyard(v) {
   const n = db.works.filter(w => w.vineyardId === v.id).length;
-  if (!confirm(n ? `Smazat vinici „${v.name}“ včetně ${n} záznamů prací?` : `Smazat vinici „${v.name}“?`)) return false;
+  if (!confirm(n ? `Smazat ${placeLabel(v)} „${v.name}“ včetně ${n} záznamů prací?` : `Smazat ${placeLabel(v)} „${v.name}“?`)) return false;
   db.vineyards = db.vineyards.filter(x => x.id !== v.id);
   db.works = db.works.filter(w => w.vineyardId !== v.id);
   if (location.hash.includes(v.id)) location.hash = '#/vinice';
-  toast('Vinice smazána.');
+  toast(isPrep(v) ? 'Pozemek smazán.' : 'Vinice smazána.');
 }
 
 /* ----- Worker ----- */
@@ -929,7 +997,7 @@ function workerForm(p) {
     title: isNew ? 'Nový pracovník' : 'Upravit pracovníka',
     body: `
       <div class="field"><label>Jméno *</label><input name="name" required value="${esc(p.name)}"></div>
-      <div class="field"><label>Hodinová sazba (Kč/h)</label><input name="rate" inputmode="decimal" value="${p.rate ?? ''}"></div>
+      <div class="field"><label>Hodinová sazba (Kč/h)</label><input name="rate" inputmode="decimal" value="${numVal(p.rate)}"></div>
       <div class="field"><label>Poznámka</label><textarea name="note">${esc(p.note)}</textarea></div>`,
     onSubmit: get => {
       if (!get('name')) { toast('Vyplň jméno.'); return false; }
@@ -1020,8 +1088,8 @@ function productForm(p) {
         <div class="field"><label>Jednotka</label><select name="unit">${options([{ id: 'l', name: 'litry (l)' }, { id: 'kg', name: 'kilogramy (kg)' }], p.unit)}</select></div>
       </div>
       <div class="grid2">
-        <div class="field"><label>Ochranná lhůta (dny)</label><input name="phiDays" inputmode="numeric" value="${p.phiDays ?? ''}" title="U postřiku se bere lhůta zvoleného povoleného použití; tato hodnota platí, když použití nevybereš."></div>
-        <div class="field"><label>Obvyklá dávka / ha</label><input name="defaultDose" inputmode="decimal" value="${p.defaultDose ?? ''}"></div>
+        <div class="field"><label>Ochranná lhůta (dny)</label><input name="phiDays" inputmode="numeric" value="${numVal(p.phiDays)}" title="U postřiku se bere lhůta zvoleného povoleného použití; tato hodnota platí, když použití nevybereš."></div>
+        <div class="field"><label>Obvyklá dávka / ha</label><input name="defaultDose" inputmode="decimal" value="${numVal(p.defaultDose)}"></div>
       </div>
       <div class="field"><label>Registrační číslo</label><input name="regNo" value="${esc(p.regNo)}" placeholder="vyplní se z registru"></div>
       <div id="por-info">${porInfoHtml(p)}</div>
@@ -1064,7 +1132,7 @@ function productForm(p) {
 const workerRow = (e = {}) => `
   <div class="row row-worker">
     <select name="w-id" aria-label="Pracovník">${options(sortByName(db.workers), e.workerId, { empty: '— pracovník —' })}</select>
-    <input name="w-hours" inputmode="decimal" placeholder="hodin" value="${e.hours ?? ''}" aria-label="Hodiny">
+    <input name="w-hours" inputmode="decimal" placeholder="hodin" value="${numVal(e.hours)}" aria-label="Hodiny">
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
   </div>`;
 
@@ -1076,7 +1144,7 @@ const productRow = (p = {}) => {
   return `
   <div class="row row-product">
     <select name="p-id" aria-label="Přípravek">${options(sortByName(db.products), p.productId, { empty: '— přípravek —' })}</select>
-    <input name="p-dose" inputmode="decimal" placeholder="dávka/ha" value="${p.dose ?? ''}" aria-label="Dávka na hektar">
+    <input name="p-dose" inputmode="decimal" placeholder="dávka/ha" value="${numVal(p.dose)}" aria-label="Dávka na hektar">
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
     <select name="p-use" aria-label="Povolené použití"${prod?.uses?.length ? '' : ' hidden'}>${useOptions(prod, p.useId)}</select>
   </div>`;
@@ -1093,8 +1161,8 @@ function applyUseDose(row) {
 const harvestRow = (h = {}, names = []) => `
   <div class="row row-harvest">
     <select name="h-variety" aria-label="Odrůda" style="flex:3">${harvestVarietyOptions(names, h.variety)}</select>
-    <input name="h-kg" inputmode="decimal" placeholder="kg" value="${h.kg ?? ''}" aria-label="Množství (kg)">
-    <input name="h-sugar" inputmode="decimal" placeholder="°NM" value="${h.sugar ?? ''}" aria-label="Cukernatost (°NM)">
+    <input name="h-kg" inputmode="decimal" placeholder="kg" value="${numVal(h.kg)}" aria-label="Množství (kg)">
+    <input name="h-sugar" inputmode="decimal" placeholder="°NM" value="${numVal(h.sugar)}" aria-label="Cukernatost (°NM)">
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
   </div>`;
 
@@ -1123,6 +1191,10 @@ function refreshHarvestVarieties() {
     : block && block.until > date ? `⚠ Ochranná lhůta běží do ${fmtDate(block.until)} (${block.product.name}).` : '';
 }
 
+// Vinice a pod nimi pozemky v přípravě (s označením).
+const workPlaces = () => [...sortByName(plantedVineyards()), ...sortByName(db.vineyards.filter(isPrep))];
+const placeName = v => (isPrep(v) ? `${v.name} (příprava)` : v.name);
+
 function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
   const isNew = !w || copy;
   const src = w || {};
@@ -1139,9 +1211,9 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
   // U nové práce lze vybrat víc vinic najednou (vytvoří se záznam pro každou).
   const vineyardField = isNew
     ? `<fieldset><legend>Vinice *</legend><div class="checks">
-        ${sortByName(db.vineyards).map(v => `<label><input type="checkbox" name="vineyards" value="${v.id}"${v.id === data.vineyardId ? ' checked' : ''}> ${esc(v.name)}</label>`).join('')}
+        ${workPlaces().map(v => `<label><input type="checkbox" name="vineyards" value="${v.id}"${v.id === data.vineyardId ? ' checked' : ''}> ${esc(placeName(v))}</label>`).join('')}
        </div><p class="small muted">Při výběru více vinic se zapíše samostatný záznam pro každou (hodiny se zapíší ke každé).</p></fieldset>`
-    : `<div class="field"><label>Vinice *</label><select name="vineyardId">${options(sortByName(db.vineyards), data.vineyardId)}</select></div>`;
+    : `<div class="field"><label>Vinice *</label><select name="vineyardId">${options(workPlaces().map(v => ({ id: v.id, name: placeName(v) })), data.vineyardId)}</select></div>`;
 
   openForm({
     title: copy ? 'Kopie práce' : isNew ? (data.status === 'planned' ? 'Naplánovat práci' : 'Zapsat práci') : 'Upravit práci',
@@ -1166,7 +1238,7 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
         <div class="rows" id="product-rows">${(data.products?.length ? data.products : [{}]).map(productRow).join('')}</div>
         <button type="button" class="btn sm" data-action="add-product-row">+ přípravek</button>
         <div class="grid2" style="margin-top:10px">
-          <div class="field"><label>Voda (l/ha)</label><input name="water" inputmode="decimal" value="${data.water ?? ''}"></div>
+          <div class="field"><label>Voda (l/ha)</label><input name="water" inputmode="decimal" value="${numVal(data.water)}"></div>
           <div class="field"><label>Proti čemu / účel</label><input name="target" value="${esc(data.target)}" placeholder="např. peronospora"></div>
         </div>
         ${db.products.length ? '' : '<p class="small muted">Přípravky přidáš v sekci Přípravky.</p>'}
@@ -1363,6 +1435,9 @@ function importRegistryPreview(list) {
         const match = findRegistryMatch(rv);
         if (match) {
           Object.assign(match, registryFields(rv));
+          // Pozemek v přípravě, který už je v registru vinic, je vysazený.
+          delete match.stage;
+          delete match.plannedPlanting;
           updated++;
         } else {
           const suffix = rv.regNo.split('/')[1] || rv.regNo;
@@ -1399,6 +1474,8 @@ const actions = {
     toast('Označeno jako provedené.');
   },
   'new-vineyard': () => vineyardForm(),
+  'new-prep': () => vineyardForm(null, { stage: 'preparation' }),
+  'plant-vineyard': el => plantForm(byId(db.vineyards, el.dataset.id)),
   'edit-vineyard': el => vineyardForm(byId(db.vineyards, el.dataset.id)),
   'delete-vineyard': el => {
     if (deleteVineyard(byId(db.vineyards, el.dataset.id)) === false) return;
@@ -1436,7 +1513,7 @@ const actions = {
   },
   'edit-product': el => productForm(byId(db.products, el.dataset.id)),
   'add-worker-row': () => $('#worker-rows').insertAdjacentHTML('beforeend', workerRow()),
-  'add-variety-row': () => $('#variety-rows').insertAdjacentHTML('beforeend', varietyRow()),
+  'add-variety-row': () => $('#variety-rows').insertAdjacentHTML('beforeend', varietyRow({}, form.dataset.stage)),
   'add-harvest-row': () => $('#harvest-rows').insertAdjacentHTML('beforeend', harvestRow({}, formVarietyNames())),
   'add-product-row': () => $('#product-rows').insertAdjacentHTML('beforeend', productRow()),
   'remove-row': el => el.closest('.row').remove(),
@@ -1467,7 +1544,7 @@ const actions = {
       for (const p of w.products || []) {
         const prod = byId(db.products, p.productId);
         rows.push([
-          w.date, w.dateTo ?? '', v?.name ?? '', v?.dpb ?? '', 'réva vinná', v?.area ?? '', prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
+          w.date, w.dateTo ?? '', v?.name ?? '', v?.dpb ?? '', isPrep(v) ? 'bez plodiny (příprava na výsadbu)' : 'réva vinná', v?.area ?? '', prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
           p.dose ?? '', prod?.unit ?? '', Math.round(productAmount(w, p) * 1000) / 1000, w.water ?? '', p.pest || w.target,
           p.useId ? p.phi : (prod?.phiDays ?? ''),
         ]);

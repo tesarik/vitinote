@@ -520,6 +520,80 @@ test('vícedenní práce: zobrazení rozsahu, rozpočítání hodin do měsíců
   },
 }));
 
+test('pozemek v přípravě: založení, práce, oddělené zobrazení a vysazení na vinici', () => withApp(async ({ page, readData }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await addVineyard(page, { name: 'Stará vinice', area: '1' });
+
+  await page.click('[data-action=new-prep]');
+  assert.equal(await page.textContent('#dlg-title'), 'Nový pozemek v přípravě');
+  await page.fill('[name=name]', 'Nad sklepem');
+  await page.fill('[name=area]', '0,6');
+  await page.fill('[name=plannedPlanting]', '2027-04');
+  await page.fill('[name=parcels]', '1234/5, 1234/6');
+  await page.fill('[name=v-name]', 'Pálava');
+  await page.fill('[name=v-area]', '0,6');
+  await page.fill('[name=v-rootstock]', 'SO4');
+  await page.fill('[name=v-vines]', '2800');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  const plot = readData().vineyards.find(v => v.name === 'Nad sklepem');
+  assert.equal(plot.stage, 'preparation');
+  assert.deepEqual(plot.varieties, [{ name: 'Pálava', area: 0.6, rootstock: 'SO4', vines: 2800 }]);
+
+  // Seznam: vinice a pozemky v přípravě zvlášť; přehled nepočítá přípravu do výměry vinic.
+  assert.match(await text(page, 'main'), /Stará vinice.*V přípravě na výsadbu.*Nad sklepem 0,6 ha · výsadba duben 2027 · Pálava · parc\. 1234\/5, 1234\/6/);
+  await page.goto(base + '#/');
+  assert.match(await text(page, '.stats'), /1 vinic 1 ha celková výměra vinic 1 pozemků v přípravě \(0,6 ha\)/);
+
+  // Práce na přípravě: pozemek je ve výběru označený.
+  await page.click('.topbar [data-action=new-work]');
+  assert.deepEqual(await page.$$eval('input[name=vineyards]', e => e.map(x => x.parentElement.textContent.trim())), ['Stará vinice', 'Nad sklepem (příprava)']);
+  await page.check('input[name=vineyards] >> nth=1');
+  await page.selectOption('[name=activityId]', { label: 'Kultivace / mulčování' });
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+
+  // Vysazení.
+  await page.goto(base + '#/vinice/' + plot.id);
+  assert.match(await text(page, 'main h1'), /Nad sklepem v přípravě na výsadbu/);
+  assert.match(await text(page, '.kv'), /Plánovaná výsadba duben 2027 Plánované odrůdy Pálava 0,6 ha · podnož SO4 · 2 800 sazenic Parcely 1234\/5, 1234\/6/);
+  await page.click('[data-action=plant-vineyard]');
+  await page.fill('[name=plantedDate]', '2027-04-20');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  const planted = readData().vineyards.find(v => v.id === plot.id);
+  assert.equal(planted.stage, undefined);
+  assert.equal(planted.plannedPlanting, undefined);
+  assert.equal(planted.plantedDate, '2027-04-20');
+  assert.deepEqual(planted.varieties, [{ name: 'Pálava', area: 0.6, rootstock: 'SO4', vines: 2800, year: '2027' }]);
+  assert.equal(readData().works.filter(w => w.vineyardId === plot.id).length, 1, 'práce z přípravy zůstanou');
+  assert.doesNotMatch(await text(page, 'main h1'), /přípravě/);
+  assert.match(await text(page, '.kv'), /Výsadba 20\. 4\. 2027/);
+
+  // Úprava vysazené vinice zachová podnož (není ve formuláři vidět).
+  await page.click('[data-action=edit-vineyard]');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(readData().vineyards.find(v => v.id === plot.id).varieties[0].rootstock, 'SO4');
+}));
+
+test('pozemek v přípravě, který už je v Registru vinic, se importem změní na vinici', () => withApp(async ({ page, readData }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/nastaveni');
+  await importRegistry(page);
+  assert.deepEqual(await page.$$eval('#dlg .item-title .badge', b => b.map(x => x.textContent)), ['nová', 'aktualizace']);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  const v = readData().vineyards.find(x => x.id === 'p1');
+  assert.equal(v.regNo, '999999/0002');
+  assert.equal(v.stage, undefined);
+  assert.equal(v.plannedPlanting, undefined);
+}, {
+  initialData: {
+    version: 1, workers: [], products: [], works: [],
+    vineyards: [{ id: 'p1', name: 'Příprava', stage: 'preparation', plannedPlanting: '2026-04', dpb: '600-1100 0202/3', varieties: [] }],
+  },
+}));
+
 test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
   const manifest = await (await fetch(server.url + 'manifest.webmanifest')).json();
   const sizes = manifest.icons.filter(i => i.type === 'image/png').map(i => `${i.sizes} ${i.purpose}`);

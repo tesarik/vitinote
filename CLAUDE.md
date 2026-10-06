@@ -34,6 +34,10 @@ Jeden JSON objekt `{ version: 1, activities, vineyards, workers, products, works
 Každá změna dat: upravit `db` → `save()` (zapíše lokálně a odešle na server) → `render()`.
 Změny tvaru dat řešit migrací v `normalizeDb()`, která se volá při načtení z localStorage, ze serveru i z importu zálohy.
 
+Pozemek v přípravě na výsadbu je vinice se `stage: 'preparation'` (`isPrep`), navíc má `plannedPlanting` (YYYY-MM) a plánované
+odrůdy s `rootstock` a `vines`. Nepočítá se do výměry vinic. Akce Vysadit (`plantForm`) smaže `stage` a nastaví `plantedDate`, práce zůstanou.
+Seznamy vinic pro výběr ber přes `workPlaces()` / `plantedVineyards()`, ne přímo `db.vineyards`.
+
 Plochy jsou v aplikaci v **ha**. Registr vinic je uvádí v m², převádí se při importu.
 
 Práce má `date` (od) a nepovinné `dateTo` (do). V seznamech se zobrazí ve všech obdobích, do kterých zasahuje (`inPeriod`).

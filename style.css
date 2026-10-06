@@ -127,8 +127,15 @@ legend { font-weight: 700; font-size: .9rem; padding: 0 4px; }
 .rows .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
 .rows .row > select { flex: 2; }
 .rows .row > input { flex: 1; min-width: 0; }
-.rows .row-harvest > input, .rows .row-variety > input[name=v-year] { flex: 0 0 68px; }
+.rows .row-harvest > input, .rows .row-variety > input[name=v-year], .rows .row-variety > input[name=v-vines] { flex: 0 0 68px; }
 .rows .row > select { min-width: 0; }
+.rows .row-variety > input[name=v-name] { flex: 3; }
+@media (max-width: 560px) {
+  .rows .row-variety-preparation { flex-wrap: wrap; }
+  .rows .row-variety-preparation > input[name=v-name] { flex: 1 1 calc(100% - 48px); }
+  .rows .row-variety-preparation > button { order: -1; margin-left: auto; }
+  .rows .row-variety-preparation > input[name=v-name] { order: -2; }
+}
 .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .checks label { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text); font-size: .95rem; margin: 0; }
 
