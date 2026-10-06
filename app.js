@@ -525,6 +525,7 @@ function renderVineyards() {
             v.area ? `${fmtNum(v.area, 4)} ha` : '',
             isPrep(v) && v.plannedPlanting ? `výsadba ${esc(fmtMonth(v.plannedPlanting))}` : '',
             esc(varietyNames(v)),
+            v.regNo ? `reg. č. ${esc(v.regNo)}` : '',
             v.dpb ? `DPB ${esc(v.dpb)}` : '',
             isPrep(v) && v.parcels ? `parc. ${esc(v.parcels)}` : '',
           ].filter(Boolean).join(' · ')}</div>
@@ -1400,6 +1401,14 @@ const stableJson = v => JSON.stringify(v ?? '', (k, x) => x && typeof x === 'obj
   : x);
 const sameFields = (a, b) => Object.keys(b).every(k => stableJson(a[k]) === stableJson(b[k]));
 
+// Jméno nové vinice z registru: trať + číslo za lomítkem. Část před lomítkem odpovídá katastru,
+// takže když jsou v importu nebo mezi vinicemi různé katastry, použije se celé reg. číslo.
+function registryName(rv, list) {
+  const prefixes = new Set([...list, ...db.vineyards].map(v => v.regNo?.split('/')[0]).filter(Boolean));
+  const number = prefixes.size > 1 ? rv.regNo : (rv.regNo.split('/')[1] || rv.regNo);
+  return rv.trat ? `${rv.trat} ${number}` : rv.regNo;
+}
+
 function importRegistryPreview(list) {
   const rows = list.map((rv, i) => {
     const match = findRegistryMatch(rv);
@@ -1440,8 +1449,7 @@ function importRegistryPreview(list) {
           delete match.plannedPlanting;
           updated++;
         } else {
-          const suffix = rv.regNo.split('/')[1] || rv.regNo;
-          db.vineyards.push({ id: uid(), name: rv.trat ? `${rv.trat} ${suffix}` : rv.regNo, note: '', ...registryFields(rv) });
+          db.vineyards.push({ id: uid(), name: registryName(rv, list), note: '', ...registryFields(rv) });
           added++;
         }
       }

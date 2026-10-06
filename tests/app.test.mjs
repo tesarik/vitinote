@@ -594,6 +594,21 @@ test('pozemek v přípravě, který už je v Registru vinic, se importem změní
   },
 }));
 
+test('import z Registru vinic: při více katastrech obsahuje jméno celé registrační číslo', () => withApp(async ({ page, readData }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/nastaveni');
+  await importRegistry(page);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.deepEqual(readData().vineyards.map(v => v.name).sort(), ['Na stráni 999999/0002', 'Stará z jiného katastru', 'Za humny 999999/0001']);
+  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice');
+  assert.match(await text(page, '.list'), /reg\. č\. 999999\/0001/);
+}, {
+  initialData: {
+    version: 1, workers: [], products: [], works: [],
+    vineyards: [{ id: 'x', name: 'Stará z jiného katastru', regNo: '888888/0001', varieties: [] }],
+  },
+}));
+
 test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
   const manifest = await (await fetch(server.url + 'manifest.webmanifest')).json();
   const sizes = manifest.icons.filter(i => i.type === 'image/png').map(i => `${i.sizes} ${i.purpose}`);
