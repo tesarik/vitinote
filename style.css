@@ -14,6 +14,7 @@
   --warn-soft: #fdf0d9;
   --danger: #b3261e;
   --radius: 10px;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%236f6266' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --shadow: 0 1px 2px rgb(0 0 0 / .06), 0 2px 8px rgb(0 0 0 / .04);
   color-scheme: light;
 }
@@ -33,6 +34,7 @@
     --warn: #f0b35a;
     --warn-soft: #3a2b14;
     --danger: #ff8a80;
+    --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23b3a5aa' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
 }
@@ -64,8 +66,8 @@ h3 { font-size: 1rem; margin: 0 0 8px; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.1rem; color: var(--text); text-decoration: none; }
 .brand img { border-radius: 7px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
-.year { width: auto; min-height: 36px; padding: 4px 8px; font-weight: 700; }
-.year.past { background: var(--warn-soft); color: var(--warn); border-color: currentColor; }
+.year { width: auto; min-height: 36px; padding: 4px 28px 4px 10px; background-position: right 8px center; font-weight: 700; }
+.year.past { background-color: var(--warn-soft); color: var(--warn); border-color: currentColor; }
 tr.current td { font-weight: 700; }
 .sync { font-size: .8rem; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 5px; }
 .sync::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
@@ -114,6 +116,13 @@ input, select, textarea {
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-height: 40px;
 }
 textarea { min-height: 70px; resize: vertical; }
+/* Vlastní šipka selectu: nativní je v každém prohlížeči jinde a u okraje. */
+select {
+  appearance: none; -webkit-appearance: none;
+  background-image: var(--chevron); background-repeat: no-repeat; background-position: right 10px center; background-size: 12px 8px;
+  padding-right: 30px; text-overflow: ellipsis; cursor: pointer;
+}
+select[multiple], select[size] { background-image: none; padding-right: 10px; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 input[type=checkbox] { width: auto; min-height: 0; accent-color: var(--accent); }
 
