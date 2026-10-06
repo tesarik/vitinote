@@ -8,9 +8,13 @@ const PRODUCT_KINDS = ['Fungicid', 'Insekticid', 'Akaricid', 'Herbicid', 'Hnojiv
 // Číselník činností: chování určuje, jaká pole má formulář práce (přípravky / sklizeň).
 const ACTIVITY_KINDS = { work: 'Běžná práce', spray: 'Ošetření (přípravky)', harvest: 'Sklizeň' };
 const DEFAULT_ACTIVITIES = [
-  ['Řez', 'work'], ['Vázání', 'work'], ['Zelené práce', 'work'], ['Zastřihování', 'work'], ['Postřik', 'spray'],
+  ['Řez', 'work'], ['Vázání', 'work'], ['Čištění kmínků', 'work'], ['Podlom', 'work'], ['Zastrkování', 'work'],
+  ['Vylamování zálistků', 'work'], ['Odlistění zóny hroznů', 'work'], ['Osečkování', 'work'], ['Postřik', 'spray'],
   ['Hnojení', 'spray'], ['Kultivace / mulčování', 'work'], ['Sklizeň', 'harvest'], ['Jiné', 'work'],
 ];
+// Názvy z dřívějšího pevného seznamu: přejmenované → nový název; zrušené se zachovají jako skryté.
+const LEGACY_ACTIVITY_NAMES = { 'Zastřihování': 'Osečkování' };
+const RETIRED_ACTIVITY_NAMES = new Set(['Zelené práce']);
 // Stabilní id z názvu: převod starých dat na dvou zařízeních tak vytvoří stejná id.
 const activityIdFor = name => 'act-' + name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const defaultActivities = () => DEFAULT_ACTIVITIES.map(([name, kind]) => ({ id: activityIdFor(name), name, kind, hidden: false }));
@@ -37,9 +41,10 @@ function normalizeDb(d) {
   // Činnost: text (w.type) → odkaz do číselníku (w.activityId).
   for (const w of d.works) {
     if (w.activityId || w.type == null) continue;
-    let a = d.activities.find(x => x.name === w.type);
+    const name = LEGACY_ACTIVITY_NAMES[w.type] ?? w.type;
+    let a = d.activities.find(x => x.name === name);
     if (!a) {
-      a = { id: activityIdFor(w.type), name: w.type, kind: 'work', hidden: false };
+      a = { id: activityIdFor(name), name, kind: 'work', hidden: RETIRED_ACTIVITY_NAMES.has(name) };
       d.activities.push(a);
     }
     w.activityId = a.id;

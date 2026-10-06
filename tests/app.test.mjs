@@ -331,6 +331,31 @@ test('číselník činností: přidání, přejmenování, skrytí, řazení a o
   },
 }));
 
+test('převod činností ze starého pevného seznamu', () => withApp(async ({ page, readData }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/prace');
+  assert.match(await text(page, '.list'), /Osečkování/);
+  assert.match(await text(page, '.list'), /Zelené práce/);
+  await page.click('.topbar [data-action=new-work]');
+  const offered = await page.$$eval('[name=activityId] option', o => o.map(x => x.textContent));
+  assert.deepEqual(offered, ['Řez', 'Vázání', 'Čištění kmínků', 'Podlom', 'Zastrkování', 'Vylamování zálistků',
+    'Odlistění zóny hroznů', 'Osečkování', 'Postřik', 'Hnojení', 'Kultivace / mulčování', 'Sklizeň', 'Jiné']);
+  await page.click('#dlg [data-action=close-dialog] >> nth=0');
+  // Převod se uloží až s první změnou; v datech pak zůstane zrušená činnost jako skrytá.
+  await addVineyard(page, { name: 'Další' });
+  const zp = readData().activities.find(a => a.name === 'Zelené práce');
+  assert.equal(zp.hidden, true);
+  assert.ok(!readData().activities.some(a => a.name === 'Zastřihování'));
+}, {
+  initialData: {
+    version: 1, workers: [], products: [],
+    vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [] }],
+    works: [
+      { id: 'w1', vineyardId: 'v1', date: isoDaysAgo(2), type: 'Zastřihování', status: 'done', workers: [], products: [] },
+      { id: 'w2', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Zelené práce', status: 'done', workers: [], products: [] },
+    ],
+  },
+}));
+
 test('registr ÚKZÚZ: aktualizace, přípravek z registru, použití u postřiku, OL a export POR', () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
   const base = page.url().replace(/#.*$/, '');
   await addVineyard(page, { name: 'Vinice', area: '1' });
