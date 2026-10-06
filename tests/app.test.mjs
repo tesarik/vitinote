@@ -155,7 +155,7 @@ test('import z Registru vinic: náhled, uložení, párování podle DPB a opako
   const data = readData();
   assert.equal(data.vineyards.length, 2);
   const za = data.vineyards.find(v => v.regNo === '999999/0001');
-  assert.equal(za.name, 'Za humny 0001');
+  assert.equal(za.name, 'Za humny 999999/0001');
   assert.equal(za.area, 0.25);
   assert.equal(za.dpb, '600-1100 0101/1');
   assert.equal(za.plantedYear, '2005–2019');
@@ -594,18 +594,29 @@ test('pozemek v přípravě, který už je v Registru vinic, se importem změní
   },
 }));
 
-test('import z Registru vinic: při více katastrech obsahuje jméno celé registrační číslo', () => withApp(async ({ page, readData }) => {
-  await page.goto(page.url().replace(/#.*$/, '') + '#/nastaveni');
-  await importRegistry(page);
+test('jména vinic z dřívějšího importu se doplní na celé reg. číslo, vlastní jména zůstanou', () => withApp(async ({ page, readData }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice');
+  const list = await text(page, '.list');
+  assert.match(list, /Dubňanská hora 700444\/1574 .*reg\. č\. 700444\/1574/);
+  assert.match(list, /U sklepa .*reg\. č\. 700444\/0742/);
+  assert.doesNotMatch(list, /U sklepa 700444/);
+
+  // Převod proběhne jen jednou: vlastní jméno končící krátkým číslem už se nezmění.
+  await page.click('.list .item >> text=Dubňanská hora');
+  await page.click('[data-action=edit-vineyard]');
+  await page.fill('[name=name]', 'Dubňanská 1574');
   await page.click('#dlg button[type=submit]');
   await saved(page);
-  assert.deepEqual(readData().vineyards.map(v => v.name).sort(), ['Na stráni 999999/0002', 'Stará z jiného katastru', 'Za humny 999999/0001']);
-  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice');
-  assert.match(await text(page, '.list'), /reg\. č\. 999999\/0001/);
+  await page.reload();
+  await page.waitForSelector('main h1');
+  assert.match(await text(page, 'main h1'), /^Dubňanská 1574$/);
 }, {
   initialData: {
     version: 1, workers: [], products: [], works: [],
-    vineyards: [{ id: 'x', name: 'Stará z jiného katastru', regNo: '888888/0001', varieties: [] }],
+    vineyards: [
+      { id: 'a', name: 'Dubňanská hora 1574', regNo: '700444/1574', varieties: [] },
+      { id: 'b', name: 'U sklepa', regNo: '700444/0742', varieties: [] },
+    ],
   },
 }));
 

@@ -19,16 +19,22 @@ const RETIRED_ACTIVITY_NAMES = new Set(['Zelené práce']);
 const activityIdFor = name => 'act-' + name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const defaultActivities = () => DEFAULT_ACTIVITIES.map(([name, kind]) => ({ id: activityIdFor(name), name, kind, hidden: false }));
 
-const emptyDb = () => ({ version: 1, activities: defaultActivities(), vineyards: [], workers: [], products: [], works: [] });
+// `migrated` = jednorázové převody, které už proběhly (nesmí se opakovat nad daty, která uživatel mezitím změnil).
+const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], products: [], works: [] });
 
 // Doplní chybějící kolekce a převede starší tvary dat (jedna odrůda jako text → seznam odrůd).
 function normalizeDb(d) {
-  d = { ...emptyDb(), ...d };
+  const migrateNames = !d.migrated?.regNoNames;
+  d = { ...emptyDb(), ...d, migrated: { ...d.migrated, regNoNames: true } };
   for (const v of d.vineyards) {
     if (!Array.isArray(v.varieties)) {
       v.varieties = String(v.variety ?? '').split(',').map(s => s.trim()).filter(Boolean).map(name => ({ name, area: null }));
     }
     delete v.variety;
+    // Dřívější import dával do jména jen číslo za lomítkem („Vyšicko 0742“) → doplnit celé reg. číslo.
+    // Jména, která si uživatel změnil, končí jinak a zůstanou.
+    const short = v.regNo?.split('/')[1];
+    if (migrateNames && short && v.name.endsWith(' ' + short)) v.name = v.name.slice(0, -short.length) + v.regNo;
   }
   // Sklizeň: jedno množství na práci → seznam po odrůdách.
   for (const w of d.works) {
@@ -1401,13 +1407,9 @@ const stableJson = v => JSON.stringify(v ?? '', (k, x) => x && typeof x === 'obj
   : x);
 const sameFields = (a, b) => Object.keys(b).every(k => stableJson(a[k]) === stableJson(b[k]));
 
-// Jméno nové vinice z registru: trať + číslo za lomítkem. Část před lomítkem odpovídá katastru,
-// takže když jsou v importu nebo mezi vinicemi různé katastry, použije se celé reg. číslo.
-function registryName(rv, list) {
-  const prefixes = new Set([...list, ...db.vineyards].map(v => v.regNo?.split('/')[0]).filter(Boolean));
-  const number = prefixes.size > 1 ? rv.regNo : (rv.regNo.split('/')[1] || rv.regNo);
-  return rv.trat ? `${rv.trat} ${number}` : rv.regNo;
-}
+// Výchozí jméno nové vinice z registru: trať + celé reg. číslo (část před lomítkem odpovídá katastru).
+// Jméno si uživatel může přepsat; import ho u existujících vinic nemění.
+const registryName = rv => (rv.trat ? `${rv.trat} ${rv.regNo}` : rv.regNo);
 
 function importRegistryPreview(list) {
   const rows = list.map((rv, i) => {
@@ -1449,7 +1451,7 @@ function importRegistryPreview(list) {
           delete match.plannedPlanting;
           updated++;
         } else {
-          db.vineyards.push({ id: uid(), name: registryName(rv, list), note: '', ...registryFields(rv) });
+          db.vineyards.push({ id: uid(), name: registryName(rv), note: '', ...registryFields(rv) });
           added++;
         }
       }
