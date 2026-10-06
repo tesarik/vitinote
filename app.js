@@ -3,11 +3,19 @@
 /* ================= Data ================= */
 
 const DB_KEY = 'vitinote:v1';
-const WORK_TYPES = ['Řez', 'Vázání', 'Zelené práce', 'Zastřihování', 'Postřik', 'Hnojení', 'Kultivace / mulčování', 'Sklizeň', 'Jiné'];
-const PRODUCT_WORK_TYPES = new Set(['Postřik', 'Hnojení']);
 const PRODUCT_KINDS = ['Fungicid', 'Insekticid', 'Akaricid', 'Herbicid', 'Hnojivo', 'Jiné'];
 
-const emptyDb = () => ({ version: 1, vineyards: [], workers: [], products: [], works: [] });
+// Číselník činností: chování určuje, jaká pole má formulář práce (přípravky / sklizeň).
+const ACTIVITY_KINDS = { work: 'Běžná práce', spray: 'Ošetření (přípravky)', harvest: 'Sklizeň' };
+const DEFAULT_ACTIVITIES = [
+  ['Řez', 'work'], ['Vázání', 'work'], ['Zelené práce', 'work'], ['Zastřihování', 'work'], ['Postřik', 'spray'],
+  ['Hnojení', 'spray'], ['Kultivace / mulčování', 'work'], ['Sklizeň', 'harvest'], ['Jiné', 'work'],
+];
+// Stabilní id z názvu: převod starých dat na dvou zařízeních tak vytvoří stejná id.
+const activityIdFor = name => 'act-' + name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const defaultActivities = () => DEFAULT_ACTIVITIES.map(([name, kind]) => ({ id: activityIdFor(name), name, kind, hidden: false }));
+
+const emptyDb = () => ({ version: 1, activities: defaultActivities(), vineyards: [], workers: [], products: [], works: [] });
 
 // Doplní chybějící kolekce a převede starší tvary dat (jedna odrůda jako text → seznam odrůd).
 function normalizeDb(d) {
@@ -25,6 +33,17 @@ function normalizeDb(d) {
     }
     delete w.harvestKg;
     delete w.sugar;
+  }
+  // Činnost: text (w.type) → odkaz do číselníku (w.activityId).
+  for (const w of d.works) {
+    if (w.activityId || w.type == null) continue;
+    let a = d.activities.find(x => x.name === w.type);
+    if (!a) {
+      a = { id: activityIdFor(w.type), name: w.type, kind: 'work', hidden: false };
+      d.activities.push(a);
+    }
+    w.activityId = a.id;
+    delete w.type;
   }
   return d;
 }
@@ -166,6 +185,11 @@ const harvestKg = w => (w.harvest || []).reduce((s, h) => s + (+h.kg || 0), 0);
 const harvestSummary = w => (w.harvest || []).map(h => [
   h.variety || 'celá vinice', h.kg ? `${fmtNum(h.kg, 0)} kg` : '', h.sugar ? `${fmtNum(h.sugar, 1)} °NM` : '',
 ].filter(Boolean).join(' ')).join(', ');
+const activityOf = w => byId(db.activities, w.activityId);
+const activityName = w => activityOf(w)?.name ?? '(smazaná činnost)';
+const kindOf = w => activityOf(w)?.kind ?? 'work';
+// Činnosti pro výběr: skryté jen pokud jsou u upravované práce.
+const selectableActivities = keepId => db.activities.filter(a => !a.hidden || a.id === keepId);
 const workHours = w => (w.workers || []).reduce((s, e) => s + (+e.hours || 0), 0);
 
 function toast(msg) {
@@ -196,19 +220,31 @@ function toCsv(rows) {
 
 /* ================= Domain logic ================= */
 
-// Nejpozdější konec ochranné lhůty na vinici (z provedených postřiků).
-function phiInfo(vineyardId) {
+// Ochranná lhůta řádku postřiku ve dnech: podle zvoleného povoleného použití, jinak podle přípravku.
+const rowPhiDays = (p, prod) => (p.useId ? p.phiDays : prod?.phiDays) || 0;
+
+// Nejpozdější konec ochranné lhůty na vinici z provedených postřiků (volitelně jen postřiky do data `at`).
+function phiInfo(vineyardId, { at, excludeId } = {}) {
   let best = null;
   for (const w of db.works) {
-    if (w.vineyardId !== vineyardId || isPlanned(w)) continue;
+    if (w.vineyardId !== vineyardId || isPlanned(w) || w.id === excludeId || (at && w.date > at)) continue;
     for (const p of w.products || []) {
       const prod = byId(db.products, p.productId);
-      if (!prod || !(prod.phiDays > 0)) continue;
-      const until = addDays(w.date, prod.phiDays);
+      const days = rowPhiDays(p, prod);
+      if (!prod || !(days > 0)) continue;
+      const until = addDays(w.date, days);
       if (!best || until > best.until) best = { until, product: prod, date: w.date };
     }
   }
   return best;
+}
+
+// Platnost povolení přípravku k datu (údaje z registru ÚKZÚZ).
+function productStatus(p, at = today()) {
+  if (!p) return null;
+  if (p.useTo && p.useTo < at) return { level: 'danger', text: `nelze použít – zásoby šlo použít do ${fmtDate(p.useTo)}` };
+  if (p.validTo && p.validTo < at) return { level: 'warn', text: `povolení skončilo, zásoby lze použít do ${fmtDate(p.useTo)}` };
+  return null;
 }
 
 function productAmount(w, p) {
@@ -219,9 +255,61 @@ function productAmount(w, p) {
 function productsSummary(w) {
   return (w.products || []).map(p => {
     const prod = byId(db.products, p.productId);
-    return `${prod?.name ?? '(smazaný)'} ${fmtNum(p.dose)} ${prod?.unit ?? ''}/ha`;
+    return `${prod?.name ?? '(smazaný)'} ${fmtNum(p.dose)} ${prod?.unit ?? ''}/ha${p.pest ? ` (${p.pest})` : ''}`;
   }).join(', ');
 }
+
+/* ================= Registr přípravků ÚKZÚZ ================= */
+
+// Výtah přípravků pro révu, který připravuje server.py (api/por). Bez serveru je null.
+let registry = null;
+let registryLoad = null;
+
+function loadRegistry(force = false) {
+  if (!registryLoad || force) {
+    registryLoad = fetch('api/por', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then(d => (registry = d));
+  }
+  return registryLoad;
+}
+
+const fold = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const findPor = regNo => registry?.products.find(r => r.regNo === regNo);
+
+function searchPor(query) {
+  const q = fold(query.trim());
+  if (!registry || q.length < 2) return [];
+  return registry.products.filter(r => fold(r.name).includes(q) || r.regNo === query.trim()).slice(0, 12);
+}
+
+// Dávka z registru převedená na jednotky aplikace (l, kg na ha); jiné jednotky (%, ml/100 m²…) nepřevádíme.
+function convertDose(value, unit) {
+  const factor = { 'l/ha': ['l', 1], 'kg/ha': ['kg', 1], 'ml/ha': ['l', 0.001], 'g/ha': ['kg', 0.001] }[unit];
+  return factor && value != null ? { unit: factor[0], dose: Math.round(value * factor[1] * 10000) / 10000 } : null;
+}
+
+const productKindFrom = kind => PRODUCT_KINDS.find(k => String(kind).split(',').map(x => x.trim()).includes(k)) ?? 'Jiné';
+const maxPhiDays = uses => {
+  const days = (uses || []).map(u => u.phiDays).filter(d => d != null);
+  return days.length ? Math.max(...days) : null;
+};
+// Údaje přípravku převzaté z registru; při aktualizaci registru se obnoví.
+const porFields = r => ({ regNo: r.regNo, validTo: r.validTo, sellTo: r.sellTo, useTo: r.useTo, substances: r.substances, uses: r.uses });
+
+function refreshLinkedProducts() {
+  let n = 0;
+  for (const p of db.products) {
+    const r = p.regNo && findPor(p.regNo);
+    if (!r) continue;
+    Object.assign(p, porFields(r), { phiDays: maxPhiDays(r.uses) ?? p.phiDays });
+    n++;
+  }
+  return n;
+}
+
+const useLabel = u => [u.pest || 'bez uvedení škodlivého organismu', u.dose, u.phi ? `OL ${u.phi}` : ''].filter(Boolean).join(' · ');
 
 /* ================= Rendering helpers ================= */
 
@@ -238,7 +326,7 @@ function workItem(w, { showVineyard = true } = {}) {
     <li class="item" data-action="edit-work" data-id="${w.id}">
       <div class="item-main">
         <div class="item-title">
-          <span class="badge${isPlanned(w) ? ' planned' : ''}">${esc(w.type)}${isPlanned(w) ? ' · plán' : ''}</span>
+          <span class="badge${isPlanned(w) ? ' planned' : ''}">${esc(activityName(w))}${isPlanned(w) ? ' · plán' : ''}</span>
           ${showVineyard ? esc(vineyardName(w.vineyardId)) : ''}
         </div>
         <div class="item-meta">${meta}</div>
@@ -352,13 +440,13 @@ function renderDashboard() {
     </div>`;
 }
 
-const workFilters = { vineyardId: '', type: '', month: '', status: '' };
+const workFilters = { vineyardId: '', activityId: '', month: '', status: '' };
 
 function renderWorks() {
   const f = workFilters;
   const works = sortWorksDesc(db.works.filter(w =>
     (!f.vineyardId || w.vineyardId === f.vineyardId) &&
-    (!f.type || w.type === f.type) &&
+    (!f.activityId || w.activityId === f.activityId) &&
     w.date.startsWith(f.month ? `${selectedYear}-${f.month}` : selectedYear) &&
     (!f.status || (f.status === 'planned') === isPlanned(w))
   ));
@@ -370,7 +458,7 @@ function renderWorks() {
     </div>
     <div class="filters">
       <select data-filter="vineyardId">${options(sortByName(db.vineyards), f.vineyardId, { empty: 'Všechny vinice' })}</select>
-      <select data-filter="type">${options(WORK_TYPES, f.type, { empty: 'Všechny práce' })}</select>
+      <select data-filter="activityId">${options(db.activities, f.activityId, { empty: 'Všechny činnosti' })}</select>
       <select data-filter="month" aria-label="Měsíc">${monthOptions(f.month, 'Celý rok')}</select>
       <select data-filter="status">${options([{ id: 'done', name: 'Provedené' }, { id: 'planned', name: 'Plánované' }], f.status, { empty: 'Provedené i plánované' })}</select>
     </div>
@@ -390,7 +478,7 @@ function renderVineyards() {
         <div class="item-main">
           <div class="item-title">${esc(v.name)} ${phi && phi.until > t ? `<span class="badge warn">OL do ${fmtDate(phi.until)}</span>` : ''}</div>
           <div class="item-meta">${[v.area ? `${fmtNum(v.area, 4)} ha` : '', esc(varietyNames(v)), v.dpb ? `DPB ${esc(v.dpb)}` : ''].filter(Boolean).join(' · ')}</div>
-          <div class="item-meta">${last ? `naposledy: ${esc(last.type)} ${fmtDate(last.date)}` : 'zatím bez prací'} · ${yearLabel()} ${fmtNum(hours, 1)} h</div>
+          <div class="item-meta">${last ? `naposledy: ${esc(activityName(last))} ${fmtDate(last.date)}` : 'zatím bez prací'} · ${yearLabel()} ${fmtNum(hours, 1)} h</div>
         </div>
       </li>`;
   }).join('');
@@ -521,24 +609,38 @@ function renderProducts() {
     if (isPlanned(w) || !inYear(w)) continue;
     for (const p of w.products || []) used[p.productId] = (used[p.productId] || 0) + productAmount(w, p);
   }
-  const rows = sortByName(db.products).map(p => `
+  const rows = sortByName(db.products).map(p => {
+    const status = productStatus(p);
+    return `
     <li class="item" data-action="edit-product" data-id="${p.id}">
       <div class="item-main">
-        <div class="item-title">${esc(p.name)} <span class="badge">${esc(p.kind)}</span></div>
+        <div class="item-title">${esc(p.name)} <span class="badge">${esc(p.kind)}</span>
+          ${status ? `<span class="badge ${status.level}">${esc(status.text)}</span>` : ''}</div>
         <div class="item-meta">${[
-          p.phiDays ? `OL ${p.phiDays} dní` : 'bez OL',
+          p.regNo ? `reg. č. ${esc(p.regNo)}` : '',
+          p.uses?.length ? `${p.uses.length} povolených použití` : '',
+          p.phiDays ? `OL až ${p.phiDays} dní` : 'bez OL',
           p.defaultDose ? `obvyklá dávka ${fmtNum(p.defaultDose)} ${esc(p.unit)}/ha` : '',
           `${yearLabel()} spotřebováno ${fmtNum(used[p.id] || 0)} ${esc(p.unit)}`,
         ].filter(Boolean).join(' · ')}</div>
         ${p.note ? `<div class="item-note">${esc(p.note)}</div>` : ''}
       </div>
-    </li>`).join('');
+    </li>`;
+  }).join('');
   return `
     <div class="page-head">
       <h1>Přípravky a hnojiva</h1>
       <button class="btn primary" data-action="new-product">+ Přidat</button>
     </div>
-    <div class="card">${rows ? `<ul class="list">${rows}</ul>` : '<p class="empty">Zatím žádné přípravky.</p>'}</div>`;
+    <div class="card">${rows ? `<ul class="list">${rows}</ul>` : '<p class="empty">Zatím žádné přípravky.</p>'}</div>
+    <div class="card">
+      <h2>Registr přípravků ÚKZÚZ</h2>
+      <p class="small muted">${registry
+        ? `Staženo ${fmtDate(registry.updated)}: ${registry.products.length} povolených přípravků pro révu.`
+        : 'Registr zatím není stažený (potřebuje běžící server).'}
+        Při přidání přípravku ho vyhledáš v registru a doplní se registrační číslo, povolená použití, dávky a ochranné lhůty.</p>
+      <button class="btn" data-action="update-registry"${sync.state === 'local' ? ' disabled' : ''}>Aktualizovat z registru</button>
+    </div>`;
 }
 
 // Měsíc ('01'–'12') ve vybraném roce, nebo '' = celý rok.
@@ -552,7 +654,7 @@ function renderWorkers() {
     for (const e of w.workers || []) {
       const s = stats[e.workerId] ??= { hours: 0, byType: {} };
       s.hours += +e.hours || 0;
-      s.byType[w.type] = (s.byType[w.type] || 0) + (+e.hours || 0);
+      s.byType[activityName(w)] = (s.byType[activityName(w)] || 0) + (+e.hours || 0);
     }
   }
   let totalH = 0, totalCost = 0;
@@ -600,6 +702,26 @@ function renderSettings() {
         <button class="btn" data-action="export-works">Deník prací (CSV)</button>
         <button class="btn" data-action="export-por">Evidence POR / hnojiv (CSV)</button>
       </div>
+    </div>
+    <div class="card">
+      <div class="page-head"><h2>Činnosti</h2><button class="btn sm" data-action="new-activity">+ Přidat činnost</button></div>
+      <p class="small muted">Číselník pro zápis prací. „Ošetření“ zobrazí ve formuláři přípravky, „Sklizeň“ odrůdy a množství.
+        Skryté činnosti se nenabízejí u nových prací, ale v zapsaných zůstanou.</p>
+      <ul class="list">${db.activities.map((a, i) => {
+        const used = db.works.filter(w => w.activityId === a.id).length;
+        return `
+        <li class="item" data-action="edit-activity" data-id="${a.id}">
+          <div class="item-main">
+            <div class="item-title">${esc(a.name)} ${a.kind !== 'work' ? `<span class="badge">${esc(ACTIVITY_KINDS[a.kind])}</span>` : ''}
+              ${a.hidden ? '<span class="badge planned">skrytá</span>' : ''}</div>
+            <div class="item-meta">${used ? `${used} záznamů` : 'zatím nepoužitá'}</div>
+          </div>
+          <div class="item-actions">
+            <button class="btn sm" data-action="move-activity" data-id="${a.id}" data-dir="-1" aria-label="Posunout nahoru"${i === 0 ? ' disabled' : ''}>↑</button>
+            <button class="btn sm" data-action="move-activity" data-id="${a.id}" data-dir="1" aria-label="Posunout dolů"${i === db.activities.length - 1 ? ' disabled' : ''}>↓</button>
+          </div>
+        </li>`;
+      }).join('')}</ul>
     </div>
     <div class="card">
       <h2>Uložení</h2>
@@ -783,7 +905,66 @@ function workerForm(p) {
   });
 }
 
+/* ----- Activity ----- */
+
+function activityForm(a) {
+  const isNew = !a;
+  a ||= { kind: 'work', hidden: false };
+  const used = isNew ? 0 : db.works.filter(w => w.activityId === a.id).length;
+  openForm({
+    title: isNew ? 'Nová činnost' : 'Upravit činnost',
+    body: `
+      <div class="field"><label>Název *</label><input name="name" required value="${esc(a.name)}" placeholder="např. Listové hnojení"></div>
+      <div class="field"><label>Chování ve formuláři práce</label><select name="kind">${options(Object.entries(ACTIVITY_KINDS).map(([id, name]) => ({ id, name })), a.kind)}</select></div>
+      <div class="checks"><label><input type="checkbox" name="hidden"${a.hidden ? ' checked' : ''}> Skrýt (nenabízet u nových prací)</label></div>
+      ${used ? `<p class="small muted">Použito u ${used} záznamů – přejmenování se projeví i u nich.</p>` : ''}`,
+    onSubmit: (get, fd) => {
+      const name = get('name');
+      if (!name) { toast('Vyplň název.'); return false; }
+      if (db.activities.some(x => x !== a && x.name.toLowerCase() === name.toLowerCase())) { toast('Činnost s tímto názvem už existuje.'); return false; }
+      Object.assign(a, { name, kind: get('kind'), hidden: fd.has('hidden') });
+      if (isNew) {
+        a.id = db.activities.some(x => x.id === activityIdFor(name)) ? uid() : activityIdFor(name);
+        db.activities.push(a);
+        toast('Činnost přidána.');
+      }
+    },
+    onDelete: isNew ? null : () => {
+      if (used) { toast(`Činnost je použitá u ${used} záznamů – můžeš ji jen skrýt.`); return false; }
+      if (!confirm(`Smazat činnost „${a.name}“?`)) return false;
+      db.activities = db.activities.filter(x => x.id !== a.id);
+    },
+  });
+}
+
 /* ----- Product ----- */
+
+// Přehled údajů z registru ve formuláři přípravku.
+function porInfoHtml(r) {
+  if (!r?.uses?.length) return '';
+  const status = productStatus(r);
+  return `
+    <div class="por-info">
+      <div class="small"><strong>Z registru ÚKZÚZ</strong> · reg. č. ${esc(r.regNo)}
+        ${r.substances?.length ? ` · ${esc(r.substances.map(x => `${x.name} ${fmtNum(x.amount)} ${x.unit}`).join(', '))}` : ''}
+        ${status ? `<span class="badge ${status.level}">${esc(status.text)}</span>` : r.validTo ? ` · povoleno do ${fmtDate(r.validTo)}` : ''}</div>
+      <ul class="small">${r.uses.map(u => `<li>${esc(useLabel(u))}</li>`).join('')}</ul>
+    </div>`;
+}
+
+function fillProductFromPor(r) {
+  const set = (name, value) => { const el = $(`[name=${name}]`, form); if (el && value != null) el.value = value; };
+  set('name', r.name);
+  set('kind', productKindFrom(r.kind));
+  set('regNo', r.regNo);
+  set('phiDays', maxPhiDays(r.uses) ?? '');
+  const use = r.uses.find(u => u.crops.includes('Réva moštová') && convertDose(u.doseMax ?? u.doseMin, u.doseUnit)) ?? r.uses.find(u => convertDose(u.doseMax ?? u.doseMin, u.doseUnit));
+  const dose = use && convertDose(use.doseMax ?? use.doseMin, use.doseUnit);
+  if (dose) { set('unit', dose.unit); set('defaultDose', String(dose.dose).replace('.', ',')); }
+  $('#por-results').innerHTML = '';
+  $('#por-search').value = '';
+  $('#por-info').innerHTML = porInfoHtml(r);
+}
 
 function productForm(p) {
   const isNew = !p;
@@ -791,20 +972,44 @@ function productForm(p) {
   openForm({
     title: isNew ? 'Nový přípravek / hnojivo' : 'Upravit přípravek',
     body: `
+      <div class="field"><label for="por-search">Vyhledat v registru ÚKZÚZ</label>
+        <input id="por-search" autocomplete="off" placeholder="název nebo registrační číslo">
+        <div id="por-results" class="por-results"></div>
+      </div>
       <div class="field"><label>Název *</label><input name="name" required value="${esc(p.name)}"></div>
       <div class="grid2">
         <div class="field"><label>Druh</label><select name="kind">${options(PRODUCT_KINDS, p.kind)}</select></div>
         <div class="field"><label>Jednotka</label><select name="unit">${options([{ id: 'l', name: 'litry (l)' }, { id: 'kg', name: 'kilogramy (kg)' }], p.unit)}</select></div>
       </div>
       <div class="grid2">
-        <div class="field"><label>Ochranná lhůta (dny)</label><input name="phiDays" inputmode="numeric" value="${p.phiDays ?? ''}"></div>
+        <div class="field"><label>Ochranná lhůta (dny)</label><input name="phiDays" inputmode="numeric" value="${p.phiDays ?? ''}" title="U postřiku se bere lhůta zvoleného povoleného použití; tato hodnota platí, když použití nevybereš."></div>
         <div class="field"><label>Obvyklá dávka / ha</label><input name="defaultDose" inputmode="decimal" value="${p.defaultDose ?? ''}"></div>
       </div>
-      <div class="field"><label>Poznámka (účinná látka, reg. číslo…)</label><textarea name="note">${esc(p.note)}</textarea></div>`,
+      <div class="field"><label>Registrační číslo</label><input name="regNo" value="${esc(p.regNo)}" placeholder="vyplní se z registru"></div>
+      <div id="por-info">${porInfoHtml(p)}</div>
+      <div class="field"><label>Poznámka</label><textarea name="note">${esc(p.note)}</textarea></div>`,
+    onInit: () => {
+      const search = $('#por-search');
+      const results = $('#por-results');
+      loadRegistry().then(() => {
+        if (!registry) search.placeholder = 'registr není stažený – aktualizuj ho v sekci Přípravky';
+      });
+      search.addEventListener('input', () => {
+        const found = searchPor(search.value);
+        results.innerHTML = found.map(r => `
+          <button type="button" class="por-hit" data-action="pick-por" data-reg="${esc(r.regNo)}">
+            <strong>${esc(r.name)}</strong> <span class="small muted">${esc(r.regNo)} · ${esc(r.kind)} · ${r.uses.length} použití</span>
+          </button>`).join('') || (search.value.trim().length >= 2 && registry ? '<p class="small muted">Nic nenalezeno.</p>' : '');
+      });
+    },
     onSubmit: get => {
       if (!get('name')) { toast('Vyplň název.'); return false; }
+      const regNo = get('regNo');
+      const r = regNo && findPor(regNo);
+      if (r) Object.assign(p, porFields(r));
+      else if (regNo !== p.regNo) for (const k of ['validTo', 'sellTo', 'useTo', 'substances', 'uses']) delete p[k];
       Object.assign(p, {
-        name: get('name'), kind: get('kind'), unit: get('unit'),
+        name: get('name'), kind: get('kind'), unit: get('unit'), regNo,
         phiDays: parseNum(get('phiDays')), defaultDose: parseNum(get('defaultDose')), note: get('note'),
       });
       if (isNew) { p.id = uid(); db.products.push(p); toast('Přípravek přidán.'); }
@@ -825,12 +1030,27 @@ const workerRow = (e = {}) => `
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
   </div>`;
 
-const productRow = (p = {}) => `
+const useOptions = (prod, selected) =>
+  options((prod?.uses || []).map(u => ({ id: u.id, name: useLabel(u) })), selected, { empty: '— povolené použití (proti čemu) —' });
+
+const productRow = (p = {}) => {
+  const prod = byId(db.products, p.productId);
+  return `
   <div class="row row-product">
     <select name="p-id" aria-label="Přípravek">${options(sortByName(db.products), p.productId, { empty: '— přípravek —' })}</select>
     <input name="p-dose" inputmode="decimal" placeholder="dávka/ha" value="${p.dose ?? ''}" aria-label="Dávka na hektar">
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
+    <select name="p-use" aria-label="Povolené použití"${prod?.uses?.length ? '' : ' hidden'}>${useOptions(prod, p.useId)}</select>
   </div>`;
+};
+
+// Dávka podle povoleného použití (horní mez), pokud jde převést na jednotku přípravku.
+function applyUseDose(row) {
+  const prod = byId(db.products, $('[name=p-id]', row).value);
+  const use = prod?.uses?.find(u => u.id === $('[name=p-use]', row).value);
+  const dose = use && convertDose(use.doseMax ?? use.doseMin, use.doseUnit);
+  if (dose && dose.unit === prod.unit) $('[name=p-dose]', row).value = String(dose.dose).replace('.', ',');
+}
 
 const harvestRow = (h = {}, names = []) => `
   <div class="row row-harvest">
@@ -858,7 +1078,11 @@ function formVarietyNames() {
 function refreshHarvestVarieties() {
   const names = formVarietyNames();
   $$('select[name=h-variety]', form).forEach(sel => { sel.innerHTML = harvestVarietyOptions(names, sel.value); });
-  $('#harvest-hint').textContent = formVineyardIds().length > 1 ? 'Sklizeň zapisuj pro každou vinici zvlášť – vyber jen jednu.' : '';
+  const ids = formVineyardIds();
+  const date = $('[name=date]', form).value;
+  const block = ids.length === 1 && date && phiInfo(ids[0], { at: date, excludeId: form.dataset.workId });
+  $('#harvest-hint').textContent = ids.length > 1 ? 'Sklizeň zapisuj pro každou vinici zvlášť – vyber jen jednu.'
+    : block && block.until > date ? `⚠ Ochranná lhůta běží do ${fmtDate(block.until)} (${block.product.name}).` : '';
 }
 
 function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
@@ -866,7 +1090,7 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
   const src = w || {};
   const data = copy
     ? { ...structuredClone(src), id: undefined, date: today(), status: 'done' }
-    : (w || { date: today(), status: planned ? 'planned' : 'done', vineyardId, type: WORK_TYPES[0] });
+    : (w || { date: today(), status: planned ? 'planned' : 'done', vineyardId, activityId: selectableActivities()[0]?.id });
 
   if (!db.vineyards.length) {
     toast('Nejdřív přidej aspoň jednu vinici.');
@@ -888,7 +1112,7 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
         <div class="field"><label>Datum *</label><input type="date" name="date" required value="${data.date}"></div>
         <div class="field"><label>Stav</label><select name="status">${options([{ id: 'done', name: 'Provedeno' }, { id: 'planned', name: 'Plánováno' }], data.status)}</select></div>
       </div>
-      <div class="field"><label>Druh práce *</label><select name="type">${options(WORK_TYPES, data.type)}</select></div>
+      <div class="field"><label>Činnost *</label><select name="activityId">${options(selectableActivities(data.activityId), data.activityId)}</select></div>
       ${vineyardField}
       <fieldset>
         <legend>Pracovníci a hodiny</legend>
@@ -914,21 +1138,29 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
       </fieldset>
       <div class="field"><label>Poznámka</label><textarea name="note">${esc(data.note)}</textarea></div>`,
     onInit: () => {
-      const typeSel = $('select[name=type]', form);
+      const typeSel = $('select[name=activityId]', form);
       const sync = () => {
-        $('#products-section').hidden = !PRODUCT_WORK_TYPES.has(typeSel.value);
-        $('#harvest-section').hidden = typeSel.value !== 'Sklizeň';
+        const kind = byId(db.activities, typeSel.value)?.kind;
+        $('#products-section').hidden = kind !== 'spray';
+        $('#harvest-section').hidden = kind !== 'harvest';
       };
       typeSel.addEventListener('change', sync);
       sync();
+      form.dataset.workId = isNew ? '' : w.id;
       refreshHarvestVarieties();
-      $$('input[name=vineyards], select[name=vineyardId]', form).forEach(el => el.addEventListener('change', refreshHarvestVarieties));
-      // Předvyplnění obvyklé dávky po výběru přípravku.
+      $$('input[name=vineyards], select[name=vineyardId], input[name=date]', form).forEach(el => el.addEventListener('change', refreshHarvestVarieties));
+      // Po výběru přípravku nabídnout jeho povolená použití a předvyplnit dávku.
       $('#product-rows').addEventListener('change', e => {
+        const row = e.target.closest('.row-product');
+        if (e.target.name === 'p-use') return applyUseDose(row);
         if (e.target.name !== 'p-id') return;
-        const dose = e.target.parentElement.querySelector('[name=p-dose]');
         const prod = byId(db.products, e.target.value);
-        if (prod?.defaultDose && !dose.value) dose.value = String(prod.defaultDose).replace('.', ',');
+        const useSel = $('[name=p-use]', row);
+        useSel.innerHTML = useOptions(prod, prod?.uses?.length === 1 ? prod.uses[0].id : '');
+        useSel.hidden = !prod?.uses?.length;
+        const dose = $('[name=p-dose]', row);
+        if (prod?.uses?.length === 1) applyUseDose(row);
+        else if (prod?.defaultDose && !dose.value) dose.value = String(prod.defaultDose).replace('.', ',');
       });
     },
     onSubmit: (get, fd) => {
@@ -936,22 +1168,40 @@ function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
       if (!get('date')) { toast('Vyplň datum.'); return false; }
       if (!vineyardIds.length || !vineyardIds[0]) { toast('Vyber aspoň jednu vinici.'); return false; }
 
-      const type = get('type');
-      if (type === 'Sklizeň' && vineyardIds.length > 1) { toast('Sklizeň zapisuj pro každou vinici zvlášť.'); return false; }
+      const activityId = get('activityId');
+      const kind = byId(db.activities, activityId)?.kind;
+      if (!kind) { toast('Vyber činnost.'); return false; }
+      if (kind === 'harvest' && vineyardIds.length > 1) { toast('Sklizeň zapisuj pro každou vinici zvlášť.'); return false; }
       const workers = $$('.row-worker', form)
         .map(r => ({ workerId: $('[name=w-id]', r).value, hours: parseNum($('[name=w-hours]', r).value) }))
         .filter(e => e.workerId);
-      const hasProducts = PRODUCT_WORK_TYPES.has(type);
+      const hasProducts = kind === 'spray';
       const products = hasProducts
         ? $$('.row-product', form)
-            .map(r => ({ productId: $('[name=p-id]', r).value, dose: parseNum($('[name=p-dose]', r).value) }))
+            .map(r => {
+              const productId = $('[name=p-id]', r).value;
+              const use = byId(db.products, productId)?.uses?.find(u => u.id === $('[name=p-use]', r).value);
+              // Údaje použití se uloží k záznamu, aby se historie nezměnila s aktualizací registru.
+              return { productId, dose: parseNum($('[name=p-dose]', r).value),
+                ...(use && { useId: use.id, pest: use.pest, phi: use.phi, phiDays: use.phiDays }) };
+            })
             .filter(p => p.productId)
         : [];
+      for (const p of products) {
+        const prod = byId(db.products, p.productId);
+        const status = productStatus(prod, get('date'));
+        if (status?.level === 'danger' && !confirm(`${prod.name}: ${status.text}. Opravdu zapsat?`)) return false;
+      }
+      // Sklizeň v ochranné lhůtě.
+      if (kind === 'harvest' && get('status') === 'done') {
+        const block = phiInfo(vineyardIds[0], { at: get('date'), excludeId: isNew ? undefined : w.id });
+        if (block && block.until > get('date') && !confirm(`Na vinici běží ochranná lhůta do ${fmtDate(block.until)} (${block.product.name}, ošetřeno ${fmtDate(block.date)}). Opravdu zapsat sklizeň?`)) return false;
+      }
       const fields = {
-        date: get('date'), status: get('status'), type, workers, products,
+        date: get('date'), status: get('status'), activityId, workers, products,
         water: hasProducts ? parseNum(get('water')) : null,
-        target: hasProducts ? get('target') : '',
-        harvest: type === 'Sklizeň'
+        target: hasProducts ? (get('target') || [...new Set(products.map(p => p.pest).filter(Boolean))].join(', ')) : '',
+        harvest: kind === 'harvest'
           ? $$('.row-harvest', form)
               .map(r => ({ variety: $('[name=h-variety]', r).value, kg: parseNum($('[name=h-kg]', r).value), sugar: parseNum($('[name=h-sugar]', r).value) }))
               .filter(h => h.kg != null || h.sugar != null)
@@ -1109,6 +1359,33 @@ const actions = {
   'new-worker': () => workerForm(),
   'edit-worker': el => workerForm(byId(db.workers, el.dataset.id)),
   'new-product': () => productForm(),
+  'new-activity': () => activityForm(),
+  'pick-por': el => fillProductFromPor(findPor(el.dataset.reg)),
+  'update-registry': async el => {
+    el.disabled = true;
+    el.textContent = 'Stahuji registr… (100 MB, obvykle 1–3 minuty)';
+    try {
+      const res = await fetch('api/por/update', { method: 'POST' });
+      const info = await res.json();
+      if (!res.ok) throw new Error(info.error || 'HTTP ' + res.status);
+      await loadRegistry(true);
+      const n = refreshLinkedProducts();
+      if (n) save();
+      toast(`Registr aktualizován: ${info.count} přípravků pro révu${n ? `, obnoveno ${n} tvých přípravků` : ''}.`);
+    } catch (e) {
+      toast('Aktualizace selhala: ' + e.message);
+    }
+    if (!dlg.open) render();
+  },
+  'edit-activity': el => activityForm(byId(db.activities, el.dataset.id)),
+  'move-activity': el => {
+    const list = db.activities;
+    const i = list.findIndex(a => a.id === el.dataset.id);
+    const j = i + Number(el.dataset.dir);
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    save(); render();
+  },
   'edit-product': el => productForm(byId(db.products, el.dataset.id)),
   'add-worker-row': () => $('#worker-rows').insertAdjacentHTML('beforeend', workerRow()),
   'add-variety-row': () => $('#variety-rows').insertAdjacentHTML('beforeend', varietyRow()),
@@ -1126,7 +1403,7 @@ const actions = {
     for (const w of sortWorksDesc(db.works).reverse()) {
       if (!w.date.startsWith(year)) continue;
       rows.push([
-        w.date, isPlanned(w) ? 'plán' : 'provedeno', vineyardName(w.vineyardId), w.type,
+        w.date, isPlanned(w) ? 'plán' : 'provedeno', vineyardName(w.vineyardId), activityName(w),
         (w.workers || []).map(e => `${workerName(e.workerId)} ${fmtNum(e.hours, 1)} h`).join(', '),
         workHours(w), productsSummary(w), harvestKg(w) || '', harvestSummary(w), w.note,
       ]);
@@ -1135,15 +1412,16 @@ const actions = {
   },
   'export-por': () => {
     const year = $('#export-year').value;
-    const rows = [['Datum', 'Vinice', 'Kód DPB', 'Plodina', 'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství', 'Voda l/ha', 'Účel', 'Ochranná lhůta (dny)']];
+    const rows = [['Datum', 'Vinice', 'Kód DPB', 'Plodina', 'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Reg. číslo', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství', 'Voda l/ha', 'Účel', 'Ochranná lhůta']];
     for (const w of sortWorksDesc(db.works).reverse()) {
       if (isPlanned(w) || !w.date.startsWith(year)) continue;
       const v = byId(db.vineyards, w.vineyardId);
       for (const p of w.products || []) {
         const prod = byId(db.products, p.productId);
         rows.push([
-          w.date, v?.name ?? '', v?.dpb ?? '', 'réva vinná', v?.area ?? '', prod?.name ?? '(smazaný)', prod?.kind ?? '',
-          p.dose ?? '', prod?.unit ?? '', Math.round(productAmount(w, p) * 1000) / 1000, w.water ?? '', w.target, prod?.phiDays ?? '',
+          w.date, v?.name ?? '', v?.dpb ?? '', 'réva vinná', v?.area ?? '', prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
+          p.dose ?? '', prod?.unit ?? '', Math.round(productAmount(w, p) * 1000) / 1000, w.water ?? '', p.pest || w.target,
+          p.useId ? p.phi : (prod?.phiDays ?? ''),
         ]);
       }
     }
@@ -1201,6 +1479,7 @@ $('#main').addEventListener('change', e => {
 
 render();
 pullFromServer();
+loadRegistry().then(() => { if (location.hash.startsWith('#/pripravky') && !dlg.open) render(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pullFromServer(); });
 window.addEventListener('online', pullFromServer);
 dlg.addEventListener('close', () => { if (isDirty()) pushToServer(); });

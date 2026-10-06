@@ -58,7 +58,7 @@ test('postřik do dvou vinic: hodiny, náklady, spotřeba a ochranná lhůta', (
   await addProduct(page, 'Kuprikol', { phi: '21', dose: '2,5' });
 
   await page.click('.topbar [data-action=new-work]');
-  await page.selectOption('[name=type]', 'Postřik');
+  await page.selectOption('[name=activityId]', { label: 'Postřik' });
   await page.check('input[name=vineyards] >> nth=0');
   await page.check('input[name=vineyards] >> nth=1');
   await page.selectOption('[name=w-id]', { label: 'Jan' });
@@ -95,7 +95,7 @@ test('sklizeň po odrůdách a souhrn v detailu vinice', () => withApp(async ({ 
 
   // Sklizeň do dvou vinic najednou se odmítne.
   await page.click('.topbar [data-action=new-work]');
-  await page.selectOption('[name=type]', 'Sklizeň');
+  await page.selectOption('[name=activityId]', { label: 'Sklizeň' });
   await page.check('input[name=vineyards] >> nth=0');
   await page.check('input[name=vineyards] >> nth=1');
   await page.click('#dlg button[type=submit]');
@@ -104,7 +104,7 @@ test('sklizeň po odrůdách a souhrn v detailu vinice', () => withApp(async ({ 
 
   await page.goto(page.url().replace(/#.*$/, '') + '#/vinice/' + id);
   await page.click('main [data-action=new-work]');
-  await page.selectOption('[name=type]', 'Sklizeň');
+  await page.selectOption('[name=activityId]', { label: 'Sklizeň' });
   const opts = await page.$$eval('select[name=h-variety] option', o => o.map(x => x.textContent));
   assert.deepEqual(opts, ['— celá vinice —', 'Pálava', 'Sauvignon']);
   await page.selectOption('.row-harvest >> nth=0 >> select', 'Pálava');
@@ -277,6 +277,166 @@ test('výběr roku přepíná práce, detail vinice, lidi i export', () => {
     },
   });
 });
+
+const isoDaysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+test('číselník činností: přidání, přejmenování, skrytí, řazení a ochrana použitých', () => withApp(async ({ page, readData }) => {
+  const base = page.url().replace(/#.*$/, '');
+  const activities = () => readData().activities.map(a => a.name);
+  await page.goto(base + '#/nastaveni');
+
+  await page.click('[data-action=new-activity]');
+  await page.fill('[name=name]', 'Listové hnojení');
+  await page.selectOption('[name=kind]', 'spray');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(activities().at(-1), 'Listové hnojení');
+
+  await page.click('[data-action=edit-activity] >> text=Řez');
+  await page.fill('[name=name]', 'Zimní řez');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  await page.click('[data-action=edit-activity] >> text=Vázání');
+  await page.check('[name=hidden]');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  await page.click('[data-action=move-activity][data-dir="-1"] >> nth=-1');   // Listové hnojení o jedno výš
+  await saved(page);
+  assert.deepEqual(activities().slice(-2), ['Listové hnojení', 'Jiné']);
+
+  // Stará práce s textovou činností „Řez“ se převedla a ukazuje nový název.
+  await page.goto(base + '#/prace');
+  assert.match(await text(page, '.list'), /Zimní řez/);
+  assert.equal(readData().works[0].activityId, 'act-rez');
+
+  // Použitou činnost nejde smazat.
+  await page.goto(base + '#/nastaveni');
+  await page.click('[data-action=edit-activity] >> text=Zimní řez');
+  await page.click('#dlg-delete');
+  assert.ok(await page.evaluate(() => document.querySelector('#dlg').open));
+  assert.ok(activities().includes('Zimní řez'));
+  await page.click('#dlg [data-action=close-dialog] >> nth=0');
+
+  // Skrytá se nenabízí, nová s chováním „ošetření“ zobrazí přípravky.
+  await page.click('.topbar [data-action=new-work]');
+  const offered = await page.$$eval('[name=activityId] option', o => o.map(x => x.textContent));
+  assert.ok(!offered.includes('Vázání') && offered.includes('Listové hnojení'));
+  await page.selectOption('[name=activityId]', { label: 'Listové hnojení' });
+  assert.ok(await page.isVisible('#products-section'));
+}, {
+  initialData: {
+    version: 1, workers: [], products: [],
+    vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [] }],
+    works: [{ id: 'w1', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Řez', status: 'done', workers: [], products: [] }],
+  },
+}));
+
+test('registr ÚKZÚZ: aktualizace, přípravek z registru, použití u postřiku, OL a export POR', () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await addVineyard(page, { name: 'Vinice', area: '1' });
+
+  await page.goto(base + '#/pripravky');
+  await page.click('[data-action=update-registry]');
+  await page.waitForSelector('text=2 povolených přípravků pro révu');
+
+  const addFromRegistry = async query => {
+    await page.click('.page-head [data-action=new-product]');
+    await page.fill('#por-search', query);
+    await page.click('.por-hit');
+    await page.click('#dlg button[type=submit]');
+    await saved(page);
+  };
+  await page.click('.page-head [data-action=new-product]');
+  await page.fill('#por-search', 'testc');
+  await page.click('.por-hit');
+  assert.equal(await page.inputValue('[name=name]'), 'Testcupro 50 WP');
+  assert.equal(await page.inputValue('[name=regNo]'), '9001-1');
+  assert.equal(await page.inputValue('[name=kind]'), 'Fungicid');
+  assert.equal(await page.inputValue('[name=unit]'), 'kg');
+  assert.equal(await page.inputValue('[name=defaultDose]'), '2');
+  assert.equal(await page.inputValue('[name=phiDays]'), '21');
+  assert.match(await text(page, '#por-info'), /plíseň révová.*černá skvrnitost révy · 1,5 kg\/ha · OL AT/);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  await addFromRegistry('9002-1');
+  const list = await text(page, '.list');
+  assert.match(list, /Testcupro 50 WP Fungicid reg\. č\. 9001-1 · 2 povolených použití/);
+  assert.match(list, /Starotox 10 EC Insekticid nelze použít – zásoby šlo použít do 1\. 1\. 2021/);
+
+  const spray = async (productLabel, useIndex) => {
+    await page.click('.topbar [data-action=new-work]');
+    await page.selectOption('[name=activityId]', { label: 'Postřik' });
+    await page.check('input[name=vineyards] >> nth=0');
+    await page.selectOption('[name=p-id]', { label: productLabel });
+    if (useIndex != null) await page.selectOption('[name=p-use]', { index: useIndex });
+    await page.click('#dlg button[type=submit]');
+  };
+  // Použití s OL „AT“ → bez pevné ochranné lhůty, dávka podle použití.
+  await spray('Testcupro 50 WP', 2);
+  await saved(page);
+  let w = readData().works.at(-1);
+  assert.deepEqual(w.products[0], { productId: w.products[0].productId, dose: 1.5, useId: '102', pest: 'černá skvrnitost révy', phi: 'AT', phiDays: null });
+  assert.equal(w.target, 'černá skvrnitost révy');
+  await page.goto(base + '#/');
+  assert.doesNotMatch(await text(page, 'main'), /Běžící ochranné lhůty/);
+
+  // Použití s OL 21 dní.
+  await spray('Testcupro 50 WP', 1);
+  await saved(page);
+  assert.match(await text(page, 'main'), /Běžící ochranné lhůty.*ještě 21 dní/);
+
+  // Přípravek po konci spotřeby zásob → potvrzení; při odmítnutí se nic neuloží.
+  answerDialogs(false);
+  const count = readData().works.length;
+  await spray('Starotox 10 EC');
+  assert.match(dialogs.at(-1), /Starotox 10 EC: nelze použít/);
+  assert.equal(readData().works.length, count);
+  await page.click('#dlg [data-action=close-dialog] >> nth=0');
+
+  // Export evidence POR obsahuje reg. číslo, účel a OL podle použití.
+  await page.goto(base + '#/nastaveni');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-por]')]);
+  const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8');
+  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;1,5;kg;1,5;;černá skvrnitost révy;AT/);
+  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;2;kg;2;;plíseň révová;21/);
+}));
+
+test('sklizeň v ochranné lhůtě: upozornění ve formuláři a potvrzení', () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await page.goto(base + '#/vinice/v1');
+  await page.click('main [data-action=new-work]');
+  await page.selectOption('[name=activityId]', { label: 'Sklizeň' });
+  assert.match(await text(page, '#harvest-hint'), /Ochranná lhůta běží do .* \(Fungi\)/);
+  await page.fill('[name=h-kg]', '1000');
+
+  answerDialogs(false);
+  await page.click('#dlg button[type=submit]');
+  assert.match(dialogs.at(-1), /Na vinici běží ochranná lhůta/);
+  assert.equal(readData().works.length, 1);
+
+  answerDialogs(true);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(readData().works.length, 2);
+
+  // Sklizeň s datem po konci lhůty projde bez dotazu.
+  const before = dialogs.length;
+  await page.click('main [data-action=new-work]');
+  await page.selectOption('[name=activityId]', { label: 'Sklizeň' });
+  await page.fill('[name=date]', isoDaysAgo(-20));
+  await page.dispatchEvent('[name=date]', 'change');
+  assert.equal(await text(page, '#harvest-hint'), '');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(dialogs.length, before);
+}, {
+  initialData: {
+    version: 1, workers: [],
+    vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [] }],
+    products: [{ id: 'p1', name: 'Fungi', kind: 'Fungicid', unit: 'l', phiDays: 21 }],
+    works: [{ id: 'w1', vineyardId: 'v1', date: isoDaysAgo(5), type: 'Postřik', status: 'done', workers: [], products: [{ productId: 'p1', dose: 1 }] }],
+  },
+}));
 
 test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
   const manifest = await (await fetch(server.url + 'manifest.webmanifest')).json();

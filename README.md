@@ -37,8 +37,16 @@ Bez skriptu (např. ve Windows): `python3 server.py`.
 - Prohlížeč si drží kopii v localStorage. Když server neběží, změny se ukládají jen tam
   (v záhlaví svítí „Jen v prohlížeči“) a na disk se odešlou, jakmile je server znovu dostupný.
 
-V sekci **Data** je záloha a obnova (JSON) a exporty do CSV (deník prací, evidence POR a hnojiv)
-a import vinic z Registru vinic (XML z Portálu farmáře).
+V sekci **Data** je záloha a obnova (JSON), exporty do CSV (deník prací, evidence POR a hnojiv),
+import vinic z Registru vinic (XML z Portálu farmáře) a číselník činností.
+
+## Registr přípravků ÚKZÚZ
+
+V sekci **Přípravky** tlačítko „Aktualizovat z registru“ stáhne veřejný
+[export registru přípravků na ochranu rostlin](https://mze.gov.cz/public/app/eagriapp/POR/DataKeStazeni.aspx)
+(~100 MB, 1–3 minuty) a uloží z něj přípravky povolené pro révu do `data/por-reva.json`.
+Přípravek pak jde vyhledat v registru a u postřiku vybrat povolené použití (škodlivý organismus),
+podle kterého se nastaví dávka a ochranná lhůta.
 
 ## Testy
 

@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<!-- Smyšlený výřez exportu registru přípravků ÚKZÚZ (struktura podle export.xml). -->
+<RESPONSE>
+  <IDLAST>4</IDLAST>
+  <POLOZKA>
+    <ID>1</ID>
+    <OJP>Testcupro 50 WP</OJP>
+    <D_POUZITELNY_DO>2099-12-31T00:00:00</D_POUZITELNY_DO>
+    <ROZHODNUTI>
+      <ID>11</ID>
+      <REG_CISLO>9001-1</REG_CISLO>
+      <DRZ_ROZH>Test Agro s.r.o.</DRZ_ROZH>
+      <D_PLATNE_DO>2099-12-31T00:00:00</D_PLATNE_DO>
+      <D_ZASD_SKUT>2100-06-30T00:00:00</D_ZASD_SKUT>
+      <D_ZAS_SKUT>2100-12-31T00:00:00</D_ZAS_SKUT>
+      <B_FCE>Fungicid, Baktericid</B_FCE>
+      <AKT_STAV>P</AKT_STAV>
+      <UL><ID>1</ID><NAZEV>Hydroxid měďnatý</NAZEV><MNOZSTVI>500</MNOZSTVI><MJ>g/kg</MJ></UL>
+      <POUZITI>
+        <OL>21</OL>
+        <PLODINA><KOD>1</KOD><TYP>PL</TYP><SHODA>false</SHODA><NAZEV>Réva moštová</NAZEV></PLODINA>
+        <PLODINA><KOD>2</KOD><TYP>PL</TYP><SHODA>false</SHODA><NAZEV>Réva stolní</NAZEV></PLODINA>
+        <SO>plíseň révová</SO>
+        <DAVKA>2 kg/ha, 200-1000 l vody/ha</DAVKA>
+        <POZNAMKA>max. 3x</POZNAMKA>
+        <DAVKOVANI><MAX_DAVKA>2</MAX_DAVKA><MIN_DAVKA>2</MIN_DAVKA><MJ>kg/ha</MJ><MJ_VODY>l/ha</MJ_VODY></DAVKOVANI>
+        <ID>101</ID>
+      </POUZITI>
+      <POUZITI>
+        <OL>AT</OL>
+        <PLODINA><KOD>1</KOD><TYP>PL</TYP><SHODA>false</SHODA><NAZEV>Réva moštová</NAZEV></PLODINA>
+        <SO>černá skvrnitost révy</SO>
+        <DAVKA>1,5 kg/ha</DAVKA>
+        <POZNAMKA />
+        <DAVKOVANI><MAX_DAVKA>1,5</MAX_DAVKA><MIN_DAVKA>1,5</MIN_DAVKA><MJ>kg/ha</MJ><MJ_VODY>l/ha</MJ_VODY></DAVKOVANI>
+        <ID>102</ID>
+      </POUZITI>
+      <POUZITI>
+        <OL>14</OL>
+        <PLODINA><KOD>3</KOD><TYP>PL</TYP><SHODA>false</SHODA><NAZEV>Brambor</NAZEV></PLODINA>
+        <SO>plíseň bramborová</SO>
+        <DAVKA>2 kg/ha</DAVKA>
+        <ID>103</ID>
+      </POUZITI>
+    </ROZHODNUTI>
+  </POLOZKA>
+  <POLOZKA>
+    <ID>2</ID>
+    <OJP>Starotox 10 EC</OJP>
+    <D_POUZITELNY_DO>2021-01-01T00:00:00</D_POUZITELNY_DO>
+    <ROZHODNUTI>
+      <ID>21</ID>
+      <REG_CISLO>9002-1</REG_CISLO>
+      <DRZ_ROZH>Test Agro s.r.o.</DRZ_ROZH>
+      <D_PLATNE_DO>2020-01-01T00:00:00</D_PLATNE_DO>
+      <D_ZASD_SKUT>2020-07-01T00:00:00</D_ZASD_SKUT>
+      <D_ZAS_SKUT>2021-01-01T00:00:00</D_ZAS_SKUT>
+      <B_FCE>Insekticid</B_FCE>
+      <AKT_STAV>P</AKT_STAV>
+      <POUZITI>
+        <OL>28</OL>
+        <PLODINA><NAZEV>Réva</NAZEV></PLODINA>
+        <SO>obaleč mramorovaný</SO>
+        <DAVKA>0,2 l/ha</DAVKA>
+        <DAVKOVANI><MAX_DAVKA>0,2</MAX_DAVKA><MIN_DAVKA>0,2</MIN_DAVKA><MJ>l/ha</MJ></DAVKOVANI>
+        <ID>201</ID>
+      </POUZITI>
+    </ROZHODNUTI>
+  </POLOZKA>
+  <POLOZKA>
+    <ID>3</ID>
+    <OJP>Zrusenol</OJP>
+    <D_POUZITELNY_DO>2015-01-01T00:00:00</D_POUZITELNY_DO>
+    <ROZHODNUTI>
+      <ID>31</ID>
+      <REG_CISLO>9003-1</REG_CISLO>
+      <B_FCE>Fungicid</B_FCE>
+      <AKT_STAV>Z</AKT_STAV>
+      <POUZITI><OL>7</OL><PLODINA><NAZEV>Réva moštová</NAZEV></PLODINA><SO>padlí révové</SO><DAVKA>1 l/ha</DAVKA><ID>301</ID></POUZITI>
+    </ROZHODNUTI>
+  </POLOZKA>
+  <POLOZKA>
+    <ID>4</ID>
+    <OJP>Bramborin</OJP>
+    <D_POUZITELNY_DO>2099-01-01T00:00:00</D_POUZITELNY_DO>
+    <ROZHODNUTI>
+      <ID>41</ID>
+      <REG_CISLO>9004-1</REG_CISLO>
+      <B_FCE>Herbicid</B_FCE>
+      <AKT_STAV>P</AKT_STAV>
+      <POUZITI><OL>-</OL><PLODINA><NAZEV>Brambor</NAZEV></PLODINA><SO>plevele</SO><DAVKA>1 l/ha</DAVKA><ID>401</ID></POUZITI>
+    </ROZHODNUTI>
+  </POLOZKA>
+</RESPONSE>

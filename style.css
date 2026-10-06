@@ -159,6 +159,14 @@ legend { font-weight: 700; font-size: .9rem; padding: 0 4px; }
 .badge.planned { background: var(--warn-soft); color: var(--warn); }
 .badge.ok { background: var(--ok-soft); color: var(--ok); }
 .badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.danger { background: var(--danger); color: var(--surface); }
+.rows .row-product { flex-wrap: wrap; }
+.rows .row-product > select[name=p-use] { flex: 1 1 100%; font-size: .9rem; }
+.por-results { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.por-hit { text-align: left; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; }
+.por-hit:hover { border-color: var(--accent); }
+.por-info { background: var(--surface-2); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+.por-info ul { margin: 6px 0 0; padding-left: 18px; }
 
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
 

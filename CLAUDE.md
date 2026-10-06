@@ -19,12 +19,15 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
 - `app.js` – celá aplikace. Pohledy jsou funkce `render*()` vracející HTML string, router podle `location.hash`
   (`#/vinice/<id>` …), akce přes delegované `data-action` atributy → objekt `actions`.
 - `style.css` – barvy jako CSS proměnné na `:root`, tmavý režim přes `prefers-color-scheme`. Mobile-first.
-- `server.py` – obsluhuje jen soubory ze seznamu `STATIC_FILES` a `GET/PUT /api/data`. Zápis je atomický, předchozí verze jako `.bak`.
+- `server.py` – obsluhuje jen soubory ze seznamu `STATIC_FILES`, `GET/PUT /api/data` a registr přípravků (`GET /api/por`,
+  `POST /api/por/update`). Zápis je atomický, předchozí verze dat jako `.bak`.
+- `por_registry.py` – z exportu registru přípravků ÚKZÚZ (~100 MB XML, stahování trvá 1–3 min) vytáhne povolené přípravky
+  s použitím pro révu do `por-reva.json` vedle datového souboru. Testy používají `--por-source tests/fixtures/registr-por.xml`.
 - `sw.js` – offline cache (stale-while-revalidate), `api/` nikdy necachuje.
 
 ### Data
 
-Jeden JSON objekt `{ version: 1, vineyards, workers, products, works }`:
+Jeden JSON objekt `{ version: 1, activities, vineyards, workers, products, works }`:
 - hlavní úložiště: soubor na disku přes `server.py` (výchozí `data/vitinote.json`),
 - kopie v `localStorage` (`vitinote:v1`) pro okamžité načtení a offline režim. Neodeslané změny označuje příznak `vitinote:dirty`.
 
@@ -36,6 +39,14 @@ Plochy jsou v aplikaci v **ha**. Registr vinic je uvádí v m², převádí se p
 Pracovní rok = kalendářní rok data práce. Výběr roku v záhlaví (`selectedYear`, jen v paměti, výchozí letošek) filtruje
 všechny roční údaje. V pohledech používat `inYear(w)` a `yearLabel()` („letos“ / „v roce 2024“), ne `today()`.
 `today()` patří jen k věcem vázaným na dnešek (ochranné lhůty, výchozí datum nové práce).
+
+Činnosti jsou číselník `activities: [{ id, name, kind: 'work'|'spray'|'harvest', hidden }]` (pořadí = pořadí v poli).
+Práce na ně odkazuje přes `activityId`. Formulář práce se řídí podle `kind`, nikdy podle názvu činnosti.
+Id výchozích a převedených činností je odvozené z názvu (`activityIdFor`), aby převod na dvou zařízeních dal stejná id.
+
+Přípravek propojený s registrem má `regNo` a kopii `uses`, `validTo`, `useTo`… (`porFields`). Při aktualizaci registru se obnoví.
+Řádek postřiku s vybraným použitím si ukládá `useId, pest, phi, phiDays`, aby se historie neměnila s registrem.
+Ochranná lhůta řádku: podle použití (`AT`/`-` = bez pevné lhůty), jinak podle `phiDays` přípravku (`rowPhiDays`).
 
 Sklizeň je u práce seznam `harvest: [{ variety, kg, sugar }]`. Prázdné `variety` znamená celou vinici.
 Odrůdy vinice jsou `varieties: [{ name, area, year, code?, vines?, training? }]` a stejná odrůda může být víckrát (různé roky výsadby).
@@ -53,6 +64,7 @@ Odrůdy vinice jsou `varieties: [{ name, area, year, code?, vines?, training? }]
 ```sh
 cd tests && npm install
 CHROME_PATH=/usr/bin/google-chrome npm test   # nebo jednorázově: npx playwright install chromium && npm test
+# npm test spouští i python3 -m unittest test_por_registry
 ```
 
 `tests/app.test.mjs` (node:test + Playwright) prochází aplikaci v prohlížeči proti `server.py`.

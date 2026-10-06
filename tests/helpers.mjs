@@ -26,10 +26,11 @@ async function waitFor(fn, timeoutMs = 5000) {
   }
 }
 
-export async function startServer({ port, dataFile } = {}) {
+export async function startServer({ port, dataFile, porSource = join(FIXTURES, 'registr-por.xml') } = {}) {
   port ??= await freePort();
   dataFile ??= join(mkdtempSync(join(tmpdir(), 'vitinote-test-')), 'data.json');
-  const proc = spawn('python3', [join(APP_DIR, 'server.py'), '--port', String(port), '--data', dataFile], { stdio: 'ignore' });
+  const proc = spawn('python3', [join(APP_DIR, 'server.py'), '--port', String(port), '--data', dataFile, '--por-source', porSource],
+    { stdio: 'ignore', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
   const url = `http://localhost:${port}/`;
   await waitFor(async () => (await fetch(url)).ok);
   return {
@@ -52,7 +53,7 @@ export async function closeBrowser() {
 
 /**
  * Spustí server (volitelně s počátečními daty `initialData`) a otevře stránku.
- * `fn` dostane { page, server, readData, newPage }.
+ * `fn` dostane { page, server, readData, newPage, dialogs, answerDialogs }.
  * Potvrzovací dialogy (confirm) se automaticky přijímají, chyby JS na stránce test shodí.
  */
 export async function withApp(fn, { viewport = { width: 420, height: 900 }, initialData } = {}) {
@@ -60,12 +61,15 @@ export async function withApp(fn, { viewport = { width: 420, height: 900 }, init
   if (initialData) writeFileSync(server.dataFile, JSON.stringify(initialData));
   const contexts = [];
   const errors = [];
+  // Potvrzovací dialogy: zprávy se sbírají do `dialogs`, odpověď se dá změnit přes `answerDialogs(false)`.
+  const dialogs = [];
+  let answer = true;
   const newPage = async () => {
     const ctx = await (await browser()).newContext({ viewport });
     contexts.push(ctx);
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(e.message));
-    page.on('dialog', d => d.accept());
+    page.on('dialog', d => { dialogs.push(d.message()); return answer ? d.accept() : d.dismiss(); });
     return page;
   };
   try {
@@ -73,7 +77,8 @@ export async function withApp(fn, { viewport = { width: 420, height: 900 }, init
     await page.goto(server.url);
     await page.waitForSelector('#sync[data-state=disk]', { state: 'attached' });
     await fn({
-      page, server, newPage,
+      page, server, newPage, dialogs,
+      answerDialogs: value => { answer = value; },
       readData: () => (existsSync(server.dataFile) ? JSON.parse(readFileSync(server.dataFile, 'utf8')) : null),
     });
     if (errors.length) throw new Error('Chyby na stránce: ' + errors.join('; '));
