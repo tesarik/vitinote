@@ -597,25 +597,25 @@ test('pozemek v přípravě, který už je v Registru vinic, se importem změní
 test('jména vinic z dřívějšího importu se doplní na celé reg. číslo, vlastní jména zůstanou', () => withApp(async ({ page, readData }) => {
   await page.goto(page.url().replace(/#.*$/, '') + '#/vinice');
   const list = await text(page, '.list');
-  assert.match(list, /Dubňanská hora 700444\/1574 .*reg\. č\. 700444\/1574/);
-  assert.match(list, /U sklepa .*reg\. č\. 700444\/0742/);
-  assert.doesNotMatch(list, /U sklepa 700444/);
+  assert.match(list, /Horní trať 999999\/0574 .*reg\. č\. 999999\/0574/);
+  assert.match(list, /U sklepa .*reg\. č\. 999999\/0742/);
+  assert.doesNotMatch(list, /U sklepa 999999/);
 
   // Převod proběhne jen jednou: vlastní jméno končící krátkým číslem už se nezmění.
-  await page.click('.list .item >> text=Dubňanská hora');
+  await page.click('.list .item >> text=Horní trať');
   await page.click('[data-action=edit-vineyard]');
-  await page.fill('[name=name]', 'Dubňanská 1574');
+  await page.fill('[name=name]', 'Horní 0574');
   await page.click('#dlg button[type=submit]');
   await saved(page);
   await page.reload();
   await page.waitForSelector('main h1');
-  assert.match(await text(page, 'main h1'), /^Dubňanská 1574$/);
+  assert.match(await text(page, 'main h1'), /^Horní 0574$/);
 }, {
   initialData: {
     version: 1, workers: [], products: [], works: [],
     vineyards: [
-      { id: 'a', name: 'Dubňanská hora 1574', regNo: '700444/1574', varieties: [] },
-      { id: 'b', name: 'U sklepa', regNo: '700444/0742', varieties: [] },
+      { id: 'a', name: 'Horní trať 0574', regNo: '999999/0574', varieties: [] },
+      { id: 'b', name: 'U sklepa', regNo: '999999/0742', varieties: [] },
     ],
   },
 }));

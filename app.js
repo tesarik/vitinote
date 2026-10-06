@@ -31,7 +31,7 @@ function normalizeDb(d) {
       v.varieties = String(v.variety ?? '').split(',').map(s => s.trim()).filter(Boolean).map(name => ({ name, area: null }));
     }
     delete v.variety;
-    // Dřívější import dával do jména jen číslo za lomítkem („Vyšicko 0742“) → doplnit celé reg. číslo.
+    // Dřívější import dával do jména jen číslo za lomítkem („Trať 0742“) → doplnit celé reg. číslo.
     // Jména, která si uživatel změnil, končí jinak a zůstanou.
     const short = v.regNo?.split('/')[1];
     if (migrateNames && short && v.name.endsWith(' ' + short)) v.name = v.name.slice(0, -short.length) + v.regNo;

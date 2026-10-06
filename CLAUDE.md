@@ -81,7 +81,9 @@ CHROME_PATH=/usr/bin/google-chrome npm test   # nebo jednorázově: npx playwrig
 Každý test má vlastní server s dočasným datovým souborem (`withApp()` v `tests/helpers.mjs`), skutečných dat se nedotýká.
 Po změně chování přidat nebo upravit test. Po uložení čekat na `saved(page)` (stav synchronizace „disk“),
 po asynchronních akcích (import souboru) čekat na výsledek v DOM, ne na pevný čas.
-Fixture `tests/fixtures/registr-vinic.xml` je smyšlená. Nikdy do testů nedávat skutečný výpis z registru.
+Fixture `tests/fixtures/registr-vinic.xml` je smyšlená. Do testů, komentářů ani příkladů nikdy nedávat skutečná data
+uživatele – ani registrační čísla vinic, názvy tratí, katastrů či DPB z `temp/` a `data/`. Používat čísla `999999/…`.
+Před pushem zkontrolovat: `git grep -n -E "<reg. čísla a tratě uživatele>"`.
 
 ## Import z Registru vinic
 
