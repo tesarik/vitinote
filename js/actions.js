@@ -17,6 +17,7 @@ import { purchaseForm } from './forms/purchase.js';
 
 export const actions = {
   'go': el => { location.hash = el.dataset.href; },
+  'print': () => window.print(),
   'works-view': el => { workFilters.view = el.dataset.view; render(); },
   'set-year': el => { setYear(el.dataset.year); render(); },
   'close-dialog': closeForm,

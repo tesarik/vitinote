@@ -961,6 +961,37 @@ test('náklady: lidé, stroje a přípravky na vinici a hektar, upozornění na 
   },
 }));
 
+test('karta vinice k tisku: obsah za rok, tisk skryje ovládání, PDF', () => withApp(async ({ page }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await page.goto(base + '#/vinice/v1');
+  await page.click('text=Tisk / PDF');
+  await page.waitForSelector('.print-card');
+  const card = await text(page, '.print-card');
+  assert.match(card, /U sklepa Karta vinice · rok \d{4}/);
+  assert.match(card, /Výchozí název Trať 999999\/0001 Výměra 0,5 ha Reg\. číslo 999999\/0001 Kód DPB 600-1100 0101\/1/);
+  assert.match(card, /réva vinná \(EPPO VITVI\)/);
+  assert.match(card, /Odrůdy Odrůda ha Rok výsadby Podnož Keřů Pálava 0,5 2015 SO4 2 000/);
+  assert.match(card, /Postřik Jan 2 h Traktor 1 mth/);
+  assert.match(card, /Ošetření \d{4} .* Cupro 9001-1 2 kg 0,5 1 kg plíseň 57/);
+  assert.match(card, /Náklady \d{4} Lidé 400 Kč Stroje 400 Kč Přípravky 100 Kč Celkem 900 Kč \(1 800 Kč\/ha\)/);
+
+  await page.emulateMedia({ media: 'print' });
+  assert.ok(!(await page.isVisible('.topbar')) && !(await page.isVisible('.nav')) && !(await page.isVisible('[data-action=print]')));
+  const pdf = await page.pdf({ format: 'A4' });
+  assert.ok(pdf.length > 5000 && pdf.subarray(0, 4).toString() === '%PDF');
+}, {
+  initialData: {
+    version: 1,
+    workers: [{ id: 'p1', name: 'Jan', rate: 200 }],
+    machines: [{ id: 'm1', name: 'Traktor', rate: 400 }],
+    vineyards: [{ id: 'v1', name: 'Trať 999999/0001', alias: 'U sklepa', regNo: '999999/0001', dpb: '600-1100 0101/1', area: 0.5,
+      varieties: [{ name: 'Pálava', area: 0.5, year: '2015', rootstock: 'SO4', vines: 2000 }] }],
+    products: [{ id: 'x', name: 'Cupro', kind: 'Fungicid', unit: 'kg', regNo: '9001-1', phiDays: 21, price: 100 }],
+    works: [{ id: 'a', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Postřik', status: 'done', target: 'plíseň', bbch: 57,
+      workers: [{ workerId: 'p1', hours: 2 }], machines: [{ machineId: 'm1', hours: 1 }], products: [{ productId: 'x', dose: 2 }] }],
+  },
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');

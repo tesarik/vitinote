@@ -4,6 +4,7 @@ import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummar
 import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
+import { renderPrintCard } from './print-card.js';
 
 export function workItem(w, { showVineyard = true } = {}) {
   const hours = workHours(w);
@@ -254,6 +255,7 @@ export function renderVineyardDetail(id) {
       <div class="actions-row">
         <button class="btn danger" data-action="delete-vineyard" data-id="${v.id}">Smazat</button>
         <button class="btn" data-action="edit-vineyard" data-id="${v.id}">Upravit</button>
+        <a class="btn" href="#/tisk/${v.id}">Tisk / PDF</a>
         ${isPrep(v) ? `<button class="btn ok" data-action="plant-vineyard" data-id="${v.id}">Vysadit</button>` : ''}
         <button class="btn primary" data-action="new-work" data-vineyard="${v.id}">+ Práce</button>
       </div>
@@ -583,6 +585,7 @@ export const routes = {
   pripravky: renderProducts,
   pracovnici: renderWorkers,
   nastaveni: renderSettings,
+  tisk: id => renderPrintCard(id),
 };
 
 export function render() {
