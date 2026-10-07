@@ -1,7 +1,9 @@
 # VitiNote
 
-Evidence prací ve vinicích: vinice a jejich odrůdy, deník prací (řez, zelené práce, postřiky,
-sklizeň…), přípravky s ochrannými lhůtami, pracovníci a odpracované hodiny. Instalovatelná PWA.
+Evidence prací ve vinicích pro menší vinařství: vinice a odrůdy (i pozemky v přípravě na výsadbu), deník prací
+s kalendářem a vyhledáváním, postřiky s přípravky z registru ÚKZÚZ (ochranné lhůty, limity aplikací, fenofáze BBCH),
+sklad přípravků, sklizeň po odrůdách, lidé a stroje, náklady na vinici a hektar, evidence POR podle nařízení
+(EU) 2023/564 a karta vinice k tisku. Instalovatelná PWA, data v JSON souboru na disku s denními zálohami.
 
 ## Spuštění
 

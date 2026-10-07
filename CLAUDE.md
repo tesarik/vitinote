@@ -1,8 +1,10 @@
 # VitiNote
 
 Evidence prací ve vinicích pro jednoho vinaře: vinice a odrůdy, pozemky v přípravě na výsadbu, deník prací
-(číselník činností, vícedenní práce), postřiky s přípravky z registru ÚKZÚZ a ochrannými lhůtami, sklizeň po odrůdách,
-pracovníci a hodiny, výběr pracovního roku, import vinic z Registru vinic, exporty CSV (deník, evidence POR).
+(číselník činností, vícedenní práce, kalendář, vyhledávání), postřiky s přípravky z registru ÚKZÚZ (povolená použití, ochranné
+lhůty, limity aplikací, BBCH), sklad přípravků, sklizeň po odrůdách, lidé a stroje, náklady na vinici a ha, výběr pracovního roku,
+import vinic z Registru vinic, exporty CSV (deník, evidence POR podle nař. EU 2023/564), karta vinice k tisku, denní zálohy,
+heslo pro přístup z místní sítě.
 UI i texty jsou česky.
 
 ## Spolupráce
@@ -29,9 +31,11 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
   - `util.js` obecné helpery (`$`, `esc`, datumy, `fmtNum`/`parseNum`, `options`, CSV) – nezávisí na ničem dalším,
   - `data.js` datový model, `normalizeDb` (převody starších dat), stav `db` a doménová logika (období, ochranné lhůty…),
   - `storage.js` localStorage + synchronizace se serverem (`save`, `pullFromServer`),
-  - `registry-por.js` registr přípravků ÚKZÚZ, `view-state.js` vybraný rok a filtry,
+  - `registry-por.js` registr přípravků ÚKZÚZ, `por-limits.js` čtení limitů použití z textu registru (bez závislostí,
+    testuje se v Node), `view-state.js` vybraný rok a filtry,
   - `views.js` stránky (`render*()` vrací HTML string) a router podle `location.hash` (`#/vinice/<id>` …),
   - `dialog.js` jediný dialog (`openForm`), `forms/*.js` jednotlivé formuláře, `import-registr-vinic.js`,
+    `print-card.js` karta vinice k tisku (`#/tisk/<id>`, styly v `@media print`),
   - `actions.js` akce přes delegované `data-action` atributy a obsluha událostí, `main.js` spuštění.
   Sdílený stav (`db`, `selectedYear`, `workersPeriod`) se z jiných modulů jen čte; přepisuje se přes setter
   ve vlastním modulu (`setDb`, `setYear`, `setWorkersPeriod`). Posluchače událostí se registrují v `init*()` volaných z `main.js`,
@@ -49,7 +53,7 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
 
 ### Data
 
-Jeden JSON objekt `{ version: 1, migrated, activities, vineyards, workers, products, works }`:
+Jeden JSON objekt `{ version: 1, migrated, activities, vineyards, workers, machines, products, purchases, works }`:
 - hlavní úložiště: soubor na disku přes `server.py` (výchozí `data/vitinote.json`),
 - kopie v `localStorage` (`vitinote:v1`) pro okamžité načtení a offline režim. Neodeslané změny označuje příznak `vitinote:dirty`.
 
@@ -88,6 +92,17 @@ Ochranná lhůta řádku: podle použití (`AT`/`-` = bez pevné lhůty), jinak 
 Platnost z registru: `validTo` konec povolení ≤ `sellTo` doprodej ≤ `useTo` spotřeba zásob. Postřik po `useTo` vyžaduje potvrzení,
 stejně jako sklizeň během běžící ochranné lhůty.
 
+Práce: `{ id, vineyardId, activityId, date, dateTo?, status: 'done'|'planned', workers: [{ workerId, hours }],
+machines: [{ machineId, hours }], products: [{ productId, dose, useId?, pest?, phi?, phiDays? }], treatedArea?, water?, bbch?,
+startTime?, target?, harvest, note }`. `treatedArea` je jen u postřiku jedné vinice, když nejde o celou výměru (`treatedArea(w)`).
+
+Limity povoleného použití (max. aplikací za rok, odstup, okna BBCH) se čtou z poznámky registru za běhu (`useLimits`),
+nic se neukládá. Kontrola při uložení postřiku je v `sprayWarnings` (forms/work.js) a vede jen k potvrzení, ne k zákazu.
+
+Sklad: `purchases: [{ id, productId, date, qty, price?, note }]`, záporné `qty` = oprava stavu po inventuře.
+Zásoba `stockOf` = nákupy − spotřeba v provedených postřicích. Cena `unitPrice` = vážený průměr nákupů, jinak `product.price`.
+Náklady `workCosts` / `vineyardCosts`: lidé (h × `rate`), stroje (mth × `rate`), přípravky (spotřeba × cena); bez sazby → `unpriced`.
+
 Sklizeň je u práce seznam `harvest: [{ variety, kg, sugar }]`. Prázdné `variety` znamená celou vinici.
 Odrůdy vinice jsou `varieties: [{ name, area, year, rootstock?, vines?, code?, training? }]` a stejná odrůda může být víckrát
 (různé roky výsadby). Formulář ukazuje jen část polí podle stavu (`VARIETY_FIELDS`), ostatní zachová v `data-extra`.
@@ -109,10 +124,13 @@ Odrůdy vinice jsou `varieties: [{ name, area, year, rootstock?, vines?, code?, 
 ```sh
 cd tests && npm install
 CHROME_PATH=/usr/bin/google-chrome npm test   # na tomto stroji nutné; jinde: npx playwright install chromium && npm test
-# npm test spouští i python3 -m unittest test_por_registry
+# npm test spouští i python3 -m unittest (test_por_registry, test_server) a jednotkové testy v Node
 ```
 
 `tests/app.test.mjs` (node:test + Playwright) prochází aplikaci v prohlížeči proti `server.py`.
+`tests/modules.test.mjs` kontroluje, že každý import v `js/` cílový modul exportuje (ESLint v projektu není).
+`por-limits.test.mjs` a `util.test.mjs` testují čisté funkce bez prohlížeče. Na server s heslem: `startServer({ password })`.
+Datum v testu, které závisí na roce, ukotvit přes `page.clock.setFixedTime()` (jinak test padá v lednu).
 Každý test má vlastní server s dočasným datovým souborem (`withApp()` v `tests/helpers.mjs`), skutečných dat se nedotýká.
 Po změně chování přidat nebo upravit test. Po uložení čekat na `saved(page)` (stav synchronizace „disk“),
 po asynchronních akcích (import souboru) čekat na výsledek v DOM, ne na pevný čas.
@@ -131,9 +149,12 @@ Vinice se párují podle `regNo` a u ručně založených vinic podle kódu blok
 - Odkaz z kódu DPB přímo na díl v mapě (2026-10): veřejný LPIS (mze.gov.cz …/plpis) nemá parametr v URL pro otevření dílu,
   jeho vyhledávací REST anonymně vrací 403. Veřejná vrstva agrigis.gov.cz `Data_INSPIRE/LPIS` identifikuje díly jiným číslem
   (`828112607/2`), ne čtvercem a kódem. Uživatel to nechal být; neoficiální rozhraní nepoužívat.
-- Návrhy, které zatím nebyly zadané: elektronická evidence POR podle nař. EU 2023/564 (nejdřív ověřit český formát),
-  ošetřená plocha u postřiku, hlídání max. počtu aplikací, BBCH u postřiku, sklad přípravků, náklady, stroje, datované zálohy,
-  heslo pro `--lan`.
+- Evidence POR (2026-10): prováděcí nař. (EU) 2023/564 platí od 1. 1. 2026 pro všechny profesionální uživatele – záznamy
+  elektronicky, strojově čitelně, do 30 dní; obsah: přípravek + číslo povolení, datum (+ čas zahájení), dávka/ha, díl LPIS,
+  ošetřená plocha, plodina s kódem EPPO, BBCH. Nař. (EU) 2025/2203 dovoluje státům odklad převodu do 1. 1. 2027.
+  ČR: předávání XML (příloha č. 5 vyhl. 200/2023 Sb.) do JUDPOR / EPH na Portálu farmáře je povinné jen nad 200 ha
+  (orná půda + vinice + chmelnice + sady). Uživatel má ~4 ha, takže stačí CSV export; XML pro JUDPOR není implementované.
+- Heslo běží po HTTP (bez TLS) – v místní síti jde odposlechnout. Pro přístup z internetu by byl potřeba HTTPS (např. reverzní proxy).
 
 ## Na co myslet
 
