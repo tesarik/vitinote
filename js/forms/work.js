@@ -1,6 +1,6 @@
 // Formulář práce: pracovníci, přípravky s povoleným použitím, sklizeň po odrůdách.
 import { $, $$, byId, daysBetween, esc, fmtDate, fmtNum, numVal, options, parseNum, sortByName, toast, today, uid } from '../util.js';
-import { db, isPrep, phiInfo, plantedVineyards, productStatus, selectableActivities, sortVineyards, sprayDates, vineyardName, vName } from '../data.js';
+import { db, phiInfo, placeName, productStatus, selectableActivities, sprayDates, vineyardName, workPlaces } from '../data.js';
 import { convertDose, useLabel } from '../registry-por.js';
 import { selectedYear, setYear } from '../view-state.js';
 import { form, openForm } from '../dialog.js';
@@ -80,10 +80,6 @@ export function refreshHarvestVarieties() {
   treated.disabled = ids.length > 1;
   treated.placeholder = ids.length > 1 ? 'celé vinice' : area ? `celá: ${fmtNum(area, 4)} ha` : 'celá vinice';
 }
-
-// Vinice a pod nimi pozemky v přípravě (s označením).
-export const workPlaces = () => [...sortVineyards(plantedVineyards()), ...sortVineyards(db.vineyards.filter(isPrep))];
-export const placeName = v => (isPrep(v) ? `${vName(v)} (příprava)` : vName(v));
 
 // Kontrola povoleného použití z registru: počet aplikací za rok, odstup od minulé aplikace, fenofáze.
 function sprayWarnings(products, vineyardIds, date, bbch, excludeId) {

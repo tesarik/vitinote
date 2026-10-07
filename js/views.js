@@ -1,6 +1,6 @@
 // Stránky aplikace (render* vrací HTML) a router podle location.hash.
 import { $, $$, addDays, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isoWeek, isPlanned, options, sortByName, thisMonth, today, weekday, WEEKDAYS } from './util.js';
-import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, machineName, periodRange, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, stockOf, unitPrice, varietyNames, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
+import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, machineName, periodRange, periodShare, phiInfo, placeName, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, stockOf, unitPrice, varietyNames, vineyardCosts, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
 import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
@@ -201,6 +201,32 @@ export function renderVineyards() {
     <div class="card">
       <div class="page-head"><h2>V přípravě na výsadbu</h2><button class="btn sm" data-action="new-prep">+ Pozemek v přípravě</button></div>
       ${prep ? `<ul class="list">${prep}</ul>` : '<p class="small muted">Pozemky, které připravuješ k výsadbě. Zapisuješ k nim práce a po výsadbě je jedním tlačítkem změníš na vinici.</p>'}
+    </div>
+    ${renderCostsTable()}`;
+}
+
+// Náklady všech vinic a pozemků za vybraný rok.
+function renderCostsTable() {
+  const rows = [...sortVineyards(plantedVineyards()), ...sortVineyards(db.vineyards.filter(isPrep))]
+    .map(v => ({ v, c: vineyardCosts(v.id, selectedYear) }))
+    .filter(({ c }) => c.total);
+  if (!rows.length) return '';
+  const sum = k => rows.reduce((s, { c }) => s + c[k], 0);
+  const area = rows.reduce((s, { v }) => s + (+v.area || 0), 0);
+  const kc = n => fmtNum(n, 0);
+  return `
+    <div class="card">
+      <h2>Náklady ${selectedYear}</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Vinice</th><th class="num">Lidé</th><th class="num">Stroje</th><th class="num">Přípravky</th><th class="num">Celkem Kč</th><th class="num">Kč/ha</th></tr></thead>
+        <tbody>${rows.map(({ v, c }) => `
+          <tr data-action="go" data-href="#/vinice/${v.id}" style="cursor:pointer">
+            <td>${esc(placeName(v))}</td><td class="num">${kc(c.labour)}</td><td class="num">${kc(c.machines)}</td><td class="num">${kc(c.products)}</td>
+            <td class="num"><strong>${kc(c.total)}</strong></td><td class="num">${v.area ? kc(c.total / v.area) : '–'}</td>
+          </tr>`).join('')}</tbody>
+        <tfoot><tr><td>Celkem</td><td class="num">${kc(sum('labour'))}</td><td class="num">${kc(sum('machines'))}</td><td class="num">${kc(sum('products'))}</td>
+          <td class="num">${kc(sum('total'))}</td><td class="num">${area ? kc(sum('total') / area) : '–'}</td></tr></tfoot>
+      </table></div>
     </div>`;
 }
 
@@ -214,6 +240,7 @@ export function renderVineyardDetail(id) {
   const hours = doneYear.reduce((s, w) => s + workHours(w) * periodShare(w, selectedYear), 0);
   const sprays = doneYear.filter(w => w.products?.length).length;
   const harvest = doneYear.reduce((s, w) => s + harvestKg(w), 0);
+  const costs = vineyardCosts(v.id, selectedYear);
   const harvestTable = renderHarvestByVariety(v, doneYear) + renderHarvestByYear(v, allWorks);
   const phi = phiInfo(id);
 
@@ -255,7 +282,10 @@ export function renderVineyardDetail(id) {
       <div class="stat"><div class="v">${fmtNum(hours, 1)} h</div><div class="l">odpracováno ${yearLabel()}</div></div>
       <div class="stat"><div class="v">${sprays}</div><div class="l">ošetření ${yearLabel()}</div></div>
       ${harvest ? `<div class="stat"><div class="v">${fmtNum(harvest, 0)} kg</div><div class="l">sklizeno ${yearLabel()}${v.area ? ` (${fmtNum(harvest / v.area / 1000)} t/ha)` : ''}</div></div>` : ''}
+      ${costs.total ? `<div class="stat"><div class="v">${fmtNum(costs.total, 0)} Kč</div><div class="l">náklady ${yearLabel()}${v.area ? ` (${fmtNum(costs.total / v.area, 0)} Kč/ha)` : ''}<br>
+        lidé ${fmtNum(costs.labour, 0)} · stroje ${fmtNum(costs.machines, 0)} · přípravky ${fmtNum(costs.products, 0)}</div></div>` : ''}
     </div>
+    ${costs.unpriced ? `<p class="small muted">Do nákladů nejsou započteny položky bez sazby nebo ceny (${costs.unpriced}×) – doplň sazby lidí a strojů a ceny přípravků.</p>` : ''}
     ${harvestTable}
     <div class="card">
       <h2>Práce ${selectedYear}</h2>

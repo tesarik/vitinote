@@ -80,6 +80,9 @@ export const placeLabel = v => (isPrep(v) ? 'pozemek' : 'vinici');
 // Vinice má výchozí název (`name`, např. z Registru vinic) a nepovinný vlastní (`alias`), který má přednost.
 export const vName = v => v.alias || v.name;
 export const sortVineyards = list => [...list].sort((a, b) => vName(a).localeCompare(vName(b), 'cs'));
+// Vinice a pod nimi pozemky v přípravě (s označením).
+export const workPlaces = () => [...sortVineyards(plantedVineyards()), ...sortVineyards(db.vineyards.filter(isPrep))];
+export const placeName = v => (isPrep(v) ? `${vName(v)} (příprava)` : vName(v));
 export const vineyardName = id => { const v = byId(db.vineyards, id); return v ? vName(v) : '(smazaná vinice)'; };
 export const workerName = id => byId(db.workers, id)?.name ?? '(smazaný)';
 export const machineName = id => byId(db.machines, id)?.name ?? '(smazaný stroj)';
@@ -184,6 +187,32 @@ export function unitPrice(prod) {
   const priced = db.purchases.filter(m => m.productId === prod?.id && m.price > 0 && m.qty > 0);
   const qty = priced.reduce((s, m) => s + m.qty, 0);
   return qty ? priced.reduce((s, m) => s + m.price, 0) / qty : (prod?.price ?? null);
+}
+
+// Náklady práce v Kč: lidé (h × sazba), stroje (mth × sazba), přípravky (spotřeba × cena za jednotku).
+// Položky bez sazby/ceny se nepočítají, jen se sečtou do `unpriced`.
+export function workCosts(w) {
+  const c = { labour: 0, machines: 0, products: 0, unpriced: 0 };
+  const add = (key, qty, price) => { if (!qty) return; if (price) c[key] += qty * price; else c.unpriced++; };
+  for (const e of w.workers || []) add('labour', +e.hours || 0, byId(db.workers, e.workerId)?.rate);
+  for (const e of w.machines || []) add('machines', +e.hours || 0, byId(db.machines, e.machineId)?.rate);
+  for (const p of w.products || []) add('products', productAmount(w, p), unitPrice(byId(db.products, p.productId)));
+  return c;
+}
+
+// Náklady vinice za období ('YYYY' / 'YYYY-MM'); vícedenní práce se rozpočítají podle dnů.
+export function vineyardCosts(vineyardId, prefix) {
+  const sum = { labour: 0, machines: 0, products: 0, unpriced: 0 };
+  for (const w of db.works) {
+    if (w.vineyardId !== vineyardId || isPlanned(w)) continue;
+    const share = periodShare(w, prefix);
+    if (!share) continue;
+    const c = workCosts(w);
+    for (const k of ['labour', 'machines', 'products']) sum[k] += c[k] * share;
+    sum.unpriced += c.unpriced;
+  }
+  sum.total = sum.labour + sum.machines + sum.products;
+  return sum;
 }
 
 // Ošetřená plocha postřiku: zadaná (jen část vinice), jinak celá výměra vinice.

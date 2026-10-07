@@ -937,6 +937,30 @@ test('sklad přípravků: nákupy, spotřeba v postřicích, zásoba, oprava sta
   },
 }));
 
+test('náklady: lidé, stroje a přípravky na vinici a hektar, upozornění na chybějící sazby', () => withApp(async ({ page }) => {
+  const base = page.url().replace(/#.*$/, '');
+  // Lidé 2 h × 200 = 400, stroj 1 mth × 400 = 400, přípravek 2 kg/ha × 0,5 ha × 100 Kč = 100 → 900 Kč, 1 800 Kč/ha.
+  await page.goto(base + '#/vinice/v1');
+  assert.match(await text(page, '.stats'), /900 Kč náklady letos \(1 800 Kč\/ha\) lidé 400 · stroje 400 · přípravky 100/);
+  assert.match(await text(page, 'main'), /bez sazby nebo ceny \(1×\)/);
+  await page.goto(base + '#/vinice');
+  assert.match(await text(page, 'main'), /Náklady \d{4} Vinice Lidé Stroje Přípravky Celkem Kč Kč\/ha A 400 400 100 900 1 800 Celkem 400 400 100 900 1 800/);
+}, {
+  initialData: {
+    version: 1,
+    workers: [{ id: 'p1', name: 'Jan', rate: 200 }, { id: 'p2', name: 'Bez sazby' }],
+    machines: [{ id: 'm1', name: 'Traktor', rate: 400 }],
+    vineyards: [{ id: 'v1', name: 'A', area: 0.5, varieties: [] }],
+    products: [{ id: 'x', name: 'Cupro', kind: 'Fungicid', unit: 'kg' }],
+    purchases: [{ id: 'n', productId: 'x', date: isoDaysAgo(10), qty: 10, price: 1000 }],
+    works: [
+      { id: 'a', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Postřik', status: 'done',
+        workers: [{ workerId: 'p1', hours: 2 }], machines: [{ machineId: 'm1', hours: 1 }], products: [{ productId: 'x', dose: 2 }] },
+      { id: 'b', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Řez', status: 'done', workers: [{ workerId: 'p2', hours: 3 }], products: [] },
+    ],
+  },
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');
