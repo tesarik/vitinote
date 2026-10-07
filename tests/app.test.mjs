@@ -704,6 +704,46 @@ test('heslo: bez přihlášení přesměruje na přihlášení, API vrací 401, 
   }
 });
 
+test('ošetřená plocha: jen část vinice, spotřeba a evidence POR podle ní', () => withApp(async ({ page, readData }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await page.click('.topbar [data-action=new-work]');
+  await page.selectOption('[name=activityId]', { label: 'Postřik' });
+  await page.check('input[name=vineyards] >> nth=0');
+  assert.equal(await page.getAttribute('[name=treatedArea]', 'placeholder'), 'celá: 1 ha');
+  await page.selectOption('[name=p-id]', { label: 'Fungi' });
+  await page.fill('[name=p-dose]', '2');
+  await page.fill('[name=treatedArea]', '1,5');
+  await page.click('#dlg button[type=submit]');
+  assert.ok(await page.evaluate(() => document.querySelector('#dlg').open), 'větší než výměra se odmítne');
+  await page.fill('[name=treatedArea]', '0,4');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.equal(readData().works[0].treatedArea, 0.4);
+
+  // Při více vinicích se plocha nezadává (celé vinice).
+  await page.click('.topbar [data-action=new-work]');
+  await page.selectOption('[name=activityId]', { label: 'Postřik' });
+  await page.check('input[name=vineyards] >> nth=0');
+  await page.check('input[name=vineyards] >> nth=1');
+  assert.ok(await page.isDisabled('[name=treatedArea]'));
+  await page.click('#dlg [data-action=close-dialog] >> nth=0');
+
+  await page.goto(base + '#/pripravky');
+  assert.match(await text(page, '.list'), /letos spotřebováno 0,8 l/, '2 l/ha × 0,4 ha');
+  await page.goto(base + '#/prace');
+  assert.match(await text(page, '.list'), /ošetřeno 0,4 ha/);
+  await page.goto(base + '#/nastaveni');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-por]')]);
+  const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8');
+  assert.match(csv, /réva vinná;0,4;Fungi;;Fungicid;2;l;0,8;/);
+}, {
+  initialData: {
+    version: 1, workers: [], works: [],
+    vineyards: [{ id: 'v1', name: 'A', area: 1, varieties: [] }, { id: 'v2', name: 'B', area: 2, varieties: [] }],
+    products: [{ id: 'p1', name: 'Fungi', kind: 'Fungicid', unit: 'l' }],
+  },
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');

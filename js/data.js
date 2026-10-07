@@ -148,9 +148,11 @@ export function productStatus(p, at = today()) {
   return null;
 }
 
+// Ošetřená plocha postřiku: zadaná (jen část vinice), jinak celá výměra vinice.
+export const treatedArea = w => w.treatedArea ?? byId(db.vineyards, w.vineyardId)?.area ?? 0;
+
 export function productAmount(w, p) {
-  const area = byId(db.vineyards, w.vineyardId)?.area || 0;
-  return (+p.dose || 0) * area;
+  return (+p.dose || 0) * treatedArea(w);
 }
 
 export function productsSummary(w) {

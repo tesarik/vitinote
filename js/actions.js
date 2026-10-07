@@ -1,6 +1,6 @@
 // Akce tlačítek (data-action) a obsluha událostí ve stránce.
 import { $, $$, byId, download, fmtNum, isPlanned, toCsv, toast, today } from './util.js';
-import { activityName, db, emptyDb, harvestKg, harvestSummary, inPeriod, isPrep, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, vName, vineyardName, workHours, workerName } from './data.js';
+import { activityName, db, emptyDb, harvestKg, harvestSummary, inPeriod, isPrep, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
 import { save } from './storage.js';
 import { findPor, loadRegistry, refreshLinkedProducts } from './registry-por.js';
 import { setWorkersPeriod, setYear, workFilters } from './view-state.js';
@@ -105,7 +105,7 @@ export const actions = {
       for (const p of w.products || []) {
         const prod = byId(db.products, p.productId);
         rows.push([
-          w.date, w.dateTo ?? '', v ? vName(v) : '', v?.dpb ?? '', isPrep(v) ? 'bez plodiny (příprava na výsadbu)' : 'réva vinná', v?.area ?? '', prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
+          w.date, w.dateTo ?? '', v ? vName(v) : '', v?.dpb ?? '', isPrep(v) ? 'bez plodiny (příprava na výsadbu)' : 'réva vinná', treatedArea(w), prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
           p.dose ?? '', prod?.unit ?? '', Math.round(productAmount(w, p) * 1000) / 1000, w.water ?? '', p.pest || w.target,
           p.useId ? p.phi : (prod?.phiDays ?? ''),
         ]);

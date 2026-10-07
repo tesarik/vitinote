@@ -12,6 +12,7 @@ export function workItem(w, { showVineyard = true } = {}) {
     fmtWorkDate(w),
     hours ? `${fmtNum(hours, 1)} h${people ? ` (${esc(people)})` : ''}` : (people ? esc(people) : ''),
     w.products?.length ? esc(productsSummary(w)) : '',
+    w.treatedArea != null ? `ošetřeno ${fmtNum(w.treatedArea, 4)} ha` : '',
     w.harvest?.length ? esc(harvestSummary(w)) : '',
   ].filter(Boolean).join(' · ');
   return `

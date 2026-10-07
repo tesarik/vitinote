@@ -1,5 +1,5 @@
 // Formulář práce: pracovníci, přípravky s povoleným použitím, sklizeň po odrůdách.
-import { $, $$, byId, esc, fmtDate, numVal, options, parseNum, sortByName, toast, today, uid } from '../util.js';
+import { $, $$, byId, esc, fmtDate, fmtNum, numVal, options, parseNum, sortByName, toast, today, uid } from '../util.js';
 import { db, isPrep, phiInfo, plantedVineyards, productStatus, selectableActivities, sortVineyards, vName } from '../data.js';
 import { convertDose, useLabel } from '../registry-por.js';
 import { selectedYear, setYear } from '../view-state.js';
@@ -66,6 +66,11 @@ export function refreshHarvestVarieties() {
   const block = ids.length === 1 && date && phiInfo(ids[0], { at: date, excludeId: form.dataset.workId });
   $('#harvest-hint').textContent = ids.length > 1 ? 'Sklizeň zapisuj pro každou vinici zvlášť – vyber jen jednu.'
     : block && block.until > date ? `⚠ Ochranná lhůta běží do ${fmtDate(block.until)} (${block.product.name}).` : '';
+  // Ošetřená plocha jde zadat jen u jedné vinice; prázdná = celá výměra.
+  const treated = $('[name=treatedArea]', form);
+  const area = ids.length === 1 ? byId(db.vineyards, ids[0])?.area : null;
+  treated.disabled = ids.length > 1;
+  treated.placeholder = ids.length > 1 ? 'celé vinice' : area ? `celá: ${fmtNum(area, 4)} ha` : 'celá vinice';
 }
 
 // Vinice a pod nimi pozemky v přípravě (s označením).
@@ -115,9 +120,10 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
         <div class="rows" id="product-rows">${(data.products?.length ? data.products : [{}]).map(productRow).join('')}</div>
         <button type="button" class="btn sm" data-action="add-product-row">+ přípravek</button>
         <div class="grid2" style="margin-top:10px">
+          <div class="field"><label>Ošetřená plocha (ha)</label><input name="treatedArea" inputmode="decimal" value="${numVal(data.treatedArea)}"></div>
           <div class="field"><label>Voda (l/ha)</label><input name="water" inputmode="decimal" value="${numVal(data.water)}"></div>
-          <div class="field"><label>Proti čemu / účel</label><input name="target" value="${esc(data.target)}" placeholder="např. peronospora"></div>
         </div>
+        <div class="field"><label>Proti čemu / účel</label><input name="target" value="${esc(data.target)}" placeholder="např. peronospora"></div>
         ${db.products.length ? '' : '<p class="small muted">Přípravky přidáš v sekci Přípravky.</p>'}
       </fieldset>
       <fieldset id="harvest-section">
@@ -180,6 +186,12 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
             })
             .filter(p => p.productId)
         : [];
+      const fullArea = byId(db.vineyards, vineyardIds[0])?.area;
+      const treated = parseNum(get('treatedArea'));
+      if (hasProducts && vineyardIds.length === 1 && treated != null) {
+        if (treated <= 0) { toast('Ošetřená plocha musí být kladná.'); return false; }
+        if (fullArea && treated > fullArea) { toast(`Ošetřená plocha je větší než výměra vinice (${fmtNum(fullArea, 4)} ha).`); return false; }
+      }
       for (const p of products) {
         const prod = byId(db.products, p.productId);
         const status = productStatus(prod, get('date'));
@@ -193,6 +205,7 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
       const fields = {
         date: get('date'), dateTo: get('dateTo') && get('dateTo') !== get('date') ? get('dateTo') : null,
         status: get('status'), activityId, workers, products,
+        treatedArea: hasProducts && vineyardIds.length === 1 && treated != null && treated !== fullArea ? treated : null,
         water: hasProducts ? parseNum(get('water')) : null,
         target: hasProducts ? (get('target') || [...new Set(products.map(p => p.pest).filter(Boolean))].join(', ')) : '',
         harvest: kind === 'harvest'
