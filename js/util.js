@@ -12,6 +12,17 @@ export const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.se
 export const daysBetween = (a, b) => Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 864e5);
 export const fmtDate = iso => { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${+d}. ${+m}. ${y}`; };
 export const fmtMonth = ym => { const [y, m] = ym.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' }); };
+export const WEEKDAYS = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'];
+const dateOf = iso => new Date(iso + 'T00:00:00');
+// Den v týdnu 0 = pondělí … 6 = neděle.
+export const weekday = iso => (dateOf(iso).getDay() + 6) % 7;
+// Číslo týdne podle ISO 8601 (týden s prvním čtvrtkem roku je 1.).
+export function isoWeek(iso) {
+  const d = dateOf(iso);
+  d.setDate(d.getDate() + 3 - weekday(iso));
+  const firstThursday = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - firstThursday) / 864e5 - 3 + ((firstThursday.getDay() + 6) % 7)) / 7);
+}
 export const fmtNum = (v, digits = 2) => (+v || 0).toLocaleString('cs-CZ', { maximumFractionDigits: digits });
 // Číslo do pole formuláře s desetinnou čárkou (parseNum přijímá obojí).
 export const numVal = v => (v == null ? '' : String(v).replace('.', ','));

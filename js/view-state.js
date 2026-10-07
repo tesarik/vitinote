@@ -24,6 +24,7 @@ export function setYear(year) {
 export function setWorkersPeriod(period) {
   workersPeriod = period;
 }
-export const workFilters = { vineyardId: '', activityId: '', month: '', status: '', q: '' };
+// view: 'list' | 'calendar' (přehled po týdnech).
+export const workFilters = { vineyardId: '', activityId: '', month: '', status: '', q: '', view: 'list' };
 // Měsíc ('01'–'12') ve vybraném roce, nebo '' = celý rok.
 export let workersPeriod = thisMonth().slice(5);

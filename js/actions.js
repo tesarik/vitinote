@@ -15,6 +15,7 @@ import { importRegistryPreview, parseRegistryXml } from './import-registr-vinic.
 
 export const actions = {
   'go': el => { location.hash = el.dataset.href; },
+  'works-view': el => { workFilters.view = el.dataset.view; render(); },
   'set-year': el => { setYear(el.dataset.year); render(); },
   'close-dialog': closeForm,
   // Bez data-vineyard (tlačítko v záhlaví) se v detailu vinice předvybere ta vinice.

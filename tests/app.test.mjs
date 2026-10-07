@@ -853,6 +853,31 @@ test('vyhledávání v pracích: poznámka, přípravek, pracovník, bez diakrit
   },
 }));
 
+test('kalendář prací: týdny a dny, vícedenní práce v každém dni, celý rok jen dny s prací', () => withApp(async ({ page }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/prace');
+  await page.selectOption('#year', '2025');
+  await page.click('[data-action=works-view][data-view=calendar]');
+  await page.selectOption('[data-filter=month]', '03');
+  const week = await text(page, '.cal-week >> nth=2');  // 1. 3. 2025 je sobota → první je 9. týden
+  assert.match(week, /^11\. týden 10\. 3\. 2025 – 16\. 3\. 2025/);
+  assert.match(week, /Po 10\. 3\. Řez Vinice · 6 h ↔ Út 11\. 3\. Řez Vinice · 6 h ↔ St 12\. 3\. Řez Vinice · 6 h ↔ Čt 13\. 3\. – Pá 14\. 3\. Vázání Vinice/);
+  assert.equal(await page.locator('.cal-week').count(), 6, 'březen 2025 zasahuje do 6 týdnů');
+
+  await page.selectOption('[data-filter=month]', '');
+  assert.equal(await page.locator('.cal-day').count(), 4, 'celý rok: jen dny s prací');
+  await page.click('.chip >> text=Vázání');
+  assert.equal(await page.textContent('#dlg-title'), 'Upravit práci');
+}, {
+  initialData: {
+    version: 1, workers: [], products: [],
+    vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [] }],
+    works: [
+      { id: 'a', vineyardId: 'v1', date: '2025-03-10', dateTo: '2025-03-12', type: 'Řez', status: 'done', workers: [{ workerId: 'x', hours: 6 }], products: [] },
+      { id: 'b', vineyardId: 'v1', date: '2025-03-14', type: 'Vázání', status: 'done', workers: [], products: [] },
+    ],
+  },
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');

@@ -1,6 +1,6 @@
 // Stránky aplikace (render* vrací HTML) a router podle location.hash.
-import { $, $$, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isPlanned, options, sortByName, thisMonth, today } from './util.js';
-import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, varietyNames, vineyardName, vName, workerName, workHours, workSearchText } from './data.js';
+import { $, $$, addDays, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isoWeek, isPlanned, options, sortByName, thisMonth, today, weekday, WEEKDAYS } from './util.js';
+import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, periodRange, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, varietyNames, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
 import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
@@ -117,7 +117,13 @@ export function renderWorks() {
   return `
     <div class="page-head">
       <h1>Práce ${selectedYear}</h1>
-      <button class="btn primary" data-action="new-work">+ Zapsat práci</button>
+      <div class="actions-row">
+        <div class="segmented" role="group" aria-label="Zobrazení">
+          <button class="btn sm${f.view === 'list' ? ' active' : ''}" data-action="works-view" data-view="list">Seznam</button>
+          <button class="btn sm${f.view === 'calendar' ? ' active' : ''}" data-action="works-view" data-view="calendar">Kalendář</button>
+        </div>
+        <button class="btn primary" data-action="new-work">+ Zapsat práci</button>
+      </div>
     </div>
     <input type="search" class="search" data-filter="q" value="${esc(f.q)}" aria-label="Hledat v pracích"
       placeholder="Hledat: poznámka, přípravek, škůdce, pracovník…">
@@ -128,7 +134,35 @@ export function renderWorks() {
       <select data-filter="status">${options([{ id: 'done', name: 'Provedené' }, { id: 'planned', name: 'Plánované' }], f.status, { empty: 'Provedené i plánované' })}</select>
     </div>
     <p class="muted small" data-q="${esc(f.q)}">${works.length} záznamů · ${fmtNum(hours, 1)} odpracovaných hodin</p>
-    <div class="card">${workList(works)}</div>`;
+    ${f.view === 'calendar' ? renderWorksCalendar(works, period) : `<div class="card">${workList(works)}</div>`}`;
+}
+
+// Kalendář po týdnech: u vybraného měsíce všechny týdny, u celého roku jen týdny s prací.
+// Vícedenní práce je v každém dni, kterého se týká.
+function renderWorksCalendar(works, period) {
+  const [from, to] = periodRange(period);
+  const t = today();
+  const weeks = new Map();
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    const dayWorks = works.filter(w => w.date <= day && workEnd(w) >= day);
+    if (!dayWorks.length && period.length === 4) continue;
+    const monday = addDays(day, -weekday(day));
+    if (!weeks.has(monday)) weeks.set(monday, []);
+    weeks.get(monday).push({ day, dayWorks });
+  }
+  if (!weeks.size) return '<div class="card"><p class="empty">Žádné záznamy.</p></div>';
+  return [...weeks].map(([monday, days]) => `
+    <div class="card cal-week">
+      <h3>${isoWeek(monday)}. týden <span class="muted small">${fmtDate(monday)} – ${fmtDate(addDays(monday, 6))}</span></h3>
+      ${days.map(({ day, dayWorks }) => `
+        <div class="cal-day${day === t ? ' today' : ''}${weekday(day) > 4 ? ' weekend' : ''}">
+          <div class="cal-date">${WEEKDAYS[weekday(day)]} ${fmtDate(day).replace(/ \d{4}$/, '')}</div>
+          <div class="cal-works">${dayWorks.length ? dayWorks.map(w => `
+            <button class="chip${isPlanned(w) ? ' planned' : ''}" data-action="edit-work" data-id="${w.id}" title="${esc(fmtWorkDate(w))}">
+              <strong>${esc(activityName(w))}</strong> ${esc(vineyardName(w.vineyardId))}${workHours(w) ? ` · ${fmtNum(workHours(w), 1)} h` : ''}${w.dateTo ? ' ↔' : ''}
+            </button>`).join('') : '<span class="muted small">–</span>'}</div>
+        </div>`).join('')}
+    </div>`).join('');
 }
 
 export function renderVineyards() {
