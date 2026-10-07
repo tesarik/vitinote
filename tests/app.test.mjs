@@ -878,6 +878,31 @@ test('kalendář prací: týdny a dny, vícedenní práce v každém dni, celý 
   },
 }));
 
+test('stroje: založení, motohodiny u práce, přehled a náklady za období', () => withApp(async ({ page, readData }) => {
+  const base = page.url().replace(/#.*$/, '');
+  await page.goto(base + '#/pracovnici');
+  await page.click('[data-action=new-machine]');
+  await page.fill('[name=name]', 'Traktor');
+  await page.fill('[name=rate]', '450');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+
+  await page.click('.topbar [data-action=new-work]');
+  await page.check('input[name=vineyards] >> nth=0');
+  await page.selectOption('[name=m-id]', { label: 'Traktor' });
+  await page.fill('[name=m-hours]', '2,5');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.deepEqual(readData().works[0].machines, [{ machineId: readData().machines[0].id, hours: 2.5 }]);
+
+  await page.goto(base + '#/prace');
+  assert.match(await text(page, '.list'), /Traktor 2,5 mth/);
+  await page.goto(base + '#/pracovnici');
+  assert.match(await text(page, 'main'), /Stroje.*Traktor 2,5 450 1 125 Kč.*Celkem 2,5 1 125 Kč/);
+}, {
+  initialData: { version: 1, workers: [], products: [], works: [], vineyards: [{ id: 'v1', name: 'A', area: 1, varieties: [] }] },
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');

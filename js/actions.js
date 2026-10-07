@@ -1,6 +1,6 @@
 // Akce tlačítek (data-action) a obsluha událostí ve stránce.
 import { $, $$, byId, download, fmtNum, isPlanned, toCsv, toast, today } from './util.js';
-import { activityName, db, emptyDb, EPPO_VINE, harvestKg, harvestSummary, inPeriod, isPrep, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
+import { activityName, db, emptyDb, EPPO_VINE, harvestKg, harvestSummary, inPeriod, isPrep, machineName, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
 import { save } from './storage.js';
 import { findPor, loadRegistry, refreshLinkedProducts } from './registry-por.js';
 import { setWorkersPeriod, setYear, workFilters } from './view-state.js';
@@ -10,8 +10,9 @@ import { deleteVineyard, plantForm, varietyRow, vineyardForm } from './forms/vin
 import { workerForm } from './forms/worker.js';
 import { activityForm } from './forms/activity.js';
 import { fillProductFromPor, productForm } from './forms/product.js';
-import { formVarietyNames, harvestRow, productRow, workForm, workerRow } from './forms/work.js';
+import { formVarietyNames, harvestRow, machineRow, productRow, workerRow, workForm } from './forms/work.js';
 import { importRegistryPreview, parseRegistryXml } from './import-registr-vinic.js';
+import { machineForm } from './forms/machine.js';
 
 export const actions = {
   'go': el => { location.hash = el.dataset.href; },
@@ -74,6 +75,9 @@ export const actions = {
     save(); render();
   },
   'edit-product': el => productForm(byId(db.products, el.dataset.id)),
+  'add-machine-row': () => $('#machine-rows').insertAdjacentHTML('beforeend', machineRow()),
+  'new-machine': () => machineForm(),
+  'edit-machine': el => machineForm(byId(db.machines, el.dataset.id)),
   'add-worker-row': () => $('#worker-rows').insertAdjacentHTML('beforeend', workerRow()),
   'add-variety-row': () => $('#variety-rows').insertAdjacentHTML('beforeend', varietyRow({}, form.dataset.stage)),
   'add-harvest-row': () => $('#harvest-rows').insertAdjacentHTML('beforeend', harvestRow({}, formVarietyNames())),
@@ -86,13 +90,14 @@ export const actions = {
   },
   'export-works': () => {
     const year = $('#export-year').value;
-    const rows = [['Datum od', 'Datum do', 'Stav', 'Vinice', 'Práce', 'Pracovníci', 'Hodiny celkem', 'Přípravky', 'Sklizeň kg', 'Sklizeň po odrůdách', 'Poznámka']];
+    const rows = [['Datum od', 'Datum do', 'Stav', 'Vinice', 'Práce', 'Pracovníci', 'Hodiny celkem', 'Stroje', 'Přípravky', 'Sklizeň kg', 'Sklizeň po odrůdách', 'Poznámka']];
     for (const w of sortWorksDesc(db.works).reverse()) {
       if (!inPeriod(w, year)) continue;
       rows.push([
         w.date, w.dateTo ?? '', isPlanned(w) ? 'plán' : 'provedeno', vineyardName(w.vineyardId), activityName(w),
         (w.workers || []).map(e => `${workerName(e.workerId)} ${fmtNum(e.hours, 1)} h`).join(', '),
-        workHours(w), productsSummary(w), harvestKg(w) || '', harvestSummary(w), w.note,
+        workHours(w), (w.machines || []).map(e => `${machineName(e.machineId)} ${fmtNum(e.hours, 1)} mth`).join(', '),
+        productsSummary(w), harvestKg(w) || '', harvestSummary(w), w.note,
       ]);
     }
     download(`vitinote-prace-${year}.csv`, toCsv(rows), 'text/csv;charset=utf-8');

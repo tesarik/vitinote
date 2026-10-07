@@ -7,6 +7,13 @@ import { form, openForm } from '../dialog.js';
 import { vineyardForm } from './vineyard.js';
 import { bbchAllowed, limitsLabel, useLimits } from '../por-limits.js';
 
+export const machineRow = (e = {}) => `
+  <div class="row row-machine">
+    <select name="m-id" aria-label="Stroj">${options(sortByName(db.machines), e.machineId, { empty: '— stroj —' })}</select>
+    <input name="m-hours" inputmode="decimal" placeholder="mth" value="${numVal(e.hours)}" aria-label="Motohodiny">
+    <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
+  </div>`;
+
 export const workerRow = (e = {}) => `
   <div class="row row-worker">
     <select name="w-id" aria-label="Pracovník">${options(sortByName(db.workers), e.workerId, { empty: '— pracovník —' })}</select>
@@ -141,6 +148,12 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
         <button type="button" class="btn sm" data-action="add-worker-row">+ pracovník</button>
         ${db.workers.length ? '' : '<p class="small muted">Pracovníky přidáš v sekci Lidé.</p>'}
       </fieldset>
+      ${db.machines.length ? `
+      <fieldset>
+        <legend>Stroje a motohodiny <span class="small muted">(celkem za celou dobu)</span></legend>
+        <div class="rows" id="machine-rows">${(data.machines?.length ? data.machines : [{}]).map(machineRow).join('')}</div>
+        <button type="button" class="btn sm" data-action="add-machine-row">+ stroj</button>
+      </fieldset>` : ''}
       <fieldset id="products-section">
         <legend>Přípravky / hnojiva</legend>
         <div class="rows" id="product-rows">${(data.products?.length ? data.products : [{}]).map(productRow).join('')}</div>
@@ -201,6 +214,9 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
       const kind = byId(db.activities, activityId)?.kind;
       if (!kind) { toast('Vyber činnost.'); return false; }
       if (kind === 'harvest' && vineyardIds.length > 1) { toast('Sklizeň zapisuj pro každou vinici zvlášť.'); return false; }
+      const machines = $$('.row-machine', form)
+        .map(r => ({ machineId: $('[name=m-id]', r).value, hours: parseNum($('[name=m-hours]', r).value) }))
+        .filter(e => e.machineId);
       const workers = $$('.row-worker', form)
         .map(r => ({ workerId: $('[name=w-id]', r).value, hours: parseNum($('[name=w-hours]', r).value) }))
         .filter(e => e.workerId);
@@ -237,7 +253,7 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
       }
       const fields = {
         date: get('date'), dateTo: get('dateTo') && get('dateTo') !== get('date') ? get('dateTo') : null,
-        status: get('status'), activityId, workers, products,
+        status: get('status'), activityId, workers, machines, products,
         treatedArea: hasProducts && vineyardIds.length === 1 && treated != null && treated !== fullArea ? treated : null,
         water: hasProducts ? parseNum(get('water')) : null,
         bbch: hasProducts ? bbch : null,

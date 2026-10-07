@@ -1,6 +1,6 @@
 // Stránky aplikace (render* vrací HTML) a router podle location.hash.
 import { $, $$, addDays, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isoWeek, isPlanned, options, sortByName, thisMonth, today, weekday, WEEKDAYS } from './util.js';
-import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, periodRange, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, varietyNames, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
+import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, machineName, periodRange, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, varietyNames, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
 import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
@@ -11,6 +11,7 @@ export function workItem(w, { showVineyard = true } = {}) {
   const meta = [
     fmtWorkDate(w),
     hours ? `${fmtNum(hours, 1)} h${people ? ` (${esc(people)})` : ''}` : (people ? esc(people) : ''),
+    (w.machines || []).length ? esc(w.machines.map(e => `${machineName(e.machineId)} ${fmtNum(e.hours, 1)} mth`).join(', ')) : '',
     w.products?.length ? esc(productsSummary(w)) : '',
     w.treatedArea != null ? `ošetřeno ${fmtNum(w.treatedArea, 4)} ha` : '',
     w.bbch != null ? `BBCH ${w.bbch}` : '',
@@ -394,8 +395,8 @@ export function renderWorkers() {
   }).join('');
   return `
     <div class="page-head">
-      <h1>Pracovníci</h1>
-      <button class="btn primary" data-action="new-worker">+ Přidat</button>
+      <h1>Lidé a stroje</h1>
+      <button class="btn primary" data-action="new-worker">+ Pracovník</button>
     </div>
     <div class="filters"><select data-filter="workersPeriod" aria-label="Období">${monthOptions(workersPeriod, `Celý rok ${selectedYear}`)}</select></div>
     <div class="card">
@@ -407,6 +408,39 @@ export function renderWorkers() {
         <tfoot><tr><td>Celkem</td><td class="num">${fmtNum(totalH, 1)}</td><td></td><td class="num">${fmtNum(totalCost, 0)} Kč</td></tr></tfoot>
       </table></div>
       <p class="small muted">Klepnutím na řádek pracovníka upravíš.</p>` : '<p class="empty">Zatím žádní pracovníci.</p>'}
+    </div>
+    ${renderMachines(prefix)}`;
+}
+
+function renderMachines(prefix) {
+  const hours = {};
+  for (const w of db.works) {
+    const share = periodShare(w, prefix);
+    if (isPlanned(w) || !share) continue;
+    for (const e of w.machines || []) hours[e.machineId] = (hours[e.machineId] || 0) + (+e.hours || 0) * share;
+  }
+  let totalH = 0, totalCost = 0;
+  const rows = sortByName(db.machines).map(m => {
+    const h = hours[m.id] || 0;
+    totalH += h;
+    totalCost += h * (+m.rate || 0);
+    return `
+      <tr data-action="edit-machine" data-id="${m.id}" style="cursor:pointer">
+        <td><strong>${esc(m.name)}</strong></td>
+        <td class="num">${fmtNum(h, 1)}</td>
+        <td class="num">${m.rate ? fmtNum(m.rate, 0) : '–'}</td>
+        <td class="num">${m.rate ? fmtNum(h * m.rate, 0) + ' Kč' : '–'}</td>
+      </tr>`;
+  }).join('');
+  return `
+    <div class="card">
+      <div class="page-head"><h2>Stroje</h2><button class="btn sm" data-action="new-machine">+ Stroj</button></div>
+      ${rows ? `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stroj</th><th class="num">Motohodiny</th><th class="num">Kč/mth</th><th class="num">Náklad</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td>Celkem</td><td class="num">${fmtNum(totalH, 1)}</td><td></td><td class="num">${fmtNum(totalCost, 0)} Kč</td></tr></tfoot>
+      </table></div>` : '<p class="small muted">Traktory, postřikovače a další stroje. U práce k nim zapíšeš motohodiny a z nich se počítají náklady.</p>'}
     </div>`;
 }
 

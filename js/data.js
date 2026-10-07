@@ -21,7 +21,7 @@ export const activityIdFor = name => 'act-' + name.normalize('NFD').replace(/[\u
 export const defaultActivities = () => DEFAULT_ACTIVITIES.map(([name, kind]) => ({ id: activityIdFor(name), name, kind, hidden: false }));
 
 // `migrated` = jednorázové převody, které už proběhly (nesmí se opakovat nad daty, která uživatel mezitím změnil).
-export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], products: [], works: [] });
+export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], machines: [], products: [], works: [] });
 
 // Doplní chybějící kolekce a převede starší tvary dat (jedna odrůda jako text → seznam odrůd).
 export function normalizeDb(d) {
@@ -82,6 +82,8 @@ export const vName = v => v.alias || v.name;
 export const sortVineyards = list => [...list].sort((a, b) => vName(a).localeCompare(vName(b), 'cs'));
 export const vineyardName = id => { const v = byId(db.vineyards, id); return v ? vName(v) : '(smazaná vinice)'; };
 export const workerName = id => byId(db.workers, id)?.name ?? '(smazaný)';
+export const machineName = id => byId(db.machines, id)?.name ?? '(smazaný stroj)';
+export const machineHours = w => (w.machines || []).reduce((s, e) => s + (+e.hours || 0), 0);
 export const varietyNames = v => [...new Set((v.varieties || []).map(x => x.name))].join(', ');
 export const harvestKg = w => (w.harvest || []).reduce((s, h) => s + (+h.kg || 0), 0);
 export const harvestSummary = w => (w.harvest || []).map(h => [
@@ -165,6 +167,7 @@ export function workSearchText(w) {
   return fold([
     activityName(w), v?.name, v?.alias, w.note, w.target, productsSummary(w), harvestSummary(w),
     ...(w.workers || []).map(e => workerName(e.workerId)),
+    ...(w.machines || []).map(e => machineName(e.machineId)),
   ].filter(Boolean).join(' '));
 }
 
