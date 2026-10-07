@@ -903,6 +903,40 @@ test('stroje: založení, motohodiny u práce, přehled a náklady za období', 
   initialData: { version: 1, workers: [], products: [], works: [], vineyards: [{ id: 'v1', name: 'A', area: 1, varieties: [] }] },
 }));
 
+test('sklad přípravků: nákupy, spotřeba v postřicích, zásoba, oprava stavu a průměrná cena', () => withApp(async ({ page, readData }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/pripravky');
+  const stock = () => text(page, '.list .stock');
+  assert.equal(await stock(), '-3 kg', 'spotřeba bez nákupu = záporná zásoba');
+
+  const buy = async (qty, price) => {
+    await page.click('[data-action=new-purchase]');
+    await page.fill('[name=qty]', qty);
+    if (price) await page.fill('[name=price]', price);
+    await page.click('#dlg button[type=submit]');
+    await saved(page);
+  };
+  await buy('10', '1000');
+  await buy('5', '800');
+  assert.equal(await stock(), '12 kg');
+  assert.match(await text(page, '.list'), /120 Kč\/kg/, '(1000 + 800) / 15 kg');
+  await buy('-2');
+  assert.equal(await stock(), '10 kg', 'oprava stavu po inventuře');
+  assert.match(await text(page, 'main'), new RegExp(`Nákupy ${new Date().getFullYear()}.*Celkem 1 800 Kč`));
+  assert.equal(readData().purchases.length, 3);
+
+  await page.click('tr[data-action=edit-purchase] >> nth=0');
+  await page.click('#dlg-delete');
+  await saved(page);
+  assert.equal(readData().purchases.length, 2);
+}, {
+  initialData: {
+    version: 1, workers: [],
+    vineyards: [{ id: 'v1', name: 'A', area: 1.5, varieties: [] }],
+    products: [{ id: 'p1', name: 'Cupro', kind: 'Fungicid', unit: 'kg' }],
+    works: [{ id: 'w', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Postřik', status: 'done', workers: [], products: [{ productId: 'p1', dose: 2 }] }],
+  },
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');

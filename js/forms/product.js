@@ -50,6 +50,10 @@ export function productForm(p) {
         <div class="field"><label>Ochranná lhůta (dny)</label><input name="phiDays" inputmode="numeric" value="${numVal(p.phiDays)}" title="U postřiku se bere lhůta zvoleného povoleného použití; tato hodnota platí, když použití nevybereš."></div>
         <div class="field"><label>Obvyklá dávka / ha</label><input name="defaultDose" inputmode="decimal" value="${numVal(p.defaultDose)}"></div>
       </div>
+      <div class="grid2">
+        <div class="field"><label>Cena za jednotku (Kč)</label><input name="price" inputmode="decimal" value="${numVal(p.price)}"
+          placeholder="když nezapisuješ nákupy"></div>
+      </div>
       <div class="field"><label>Registrační číslo</label><input name="regNo" value="${esc(p.regNo)}" placeholder="vyplní se z registru"></div>
       <div id="por-info">${porInfoHtml(p)}</div>
       <div class="field"><label>Poznámka</label><textarea name="note">${esc(p.note)}</textarea></div>`,
@@ -75,7 +79,7 @@ export function productForm(p) {
       else if (regNo !== p.regNo) for (const k of ['validTo', 'sellTo', 'useTo', 'substances', 'uses']) delete p[k];
       Object.assign(p, {
         name: get('name'), kind: get('kind'), unit: get('unit'), regNo,
-        phiDays: parseNum(get('phiDays')), defaultDose: parseNum(get('defaultDose')), note: get('note'),
+        phiDays: parseNum(get('phiDays')), defaultDose: parseNum(get('defaultDose')), price: parseNum(get('price')), note: get('note'),
       });
       if (isNew) { p.id = uid(); db.products.push(p); toast('Přípravek přidán.'); }
     },

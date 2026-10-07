@@ -13,6 +13,7 @@ import { fillProductFromPor, productForm } from './forms/product.js';
 import { formVarietyNames, harvestRow, machineRow, productRow, workerRow, workForm } from './forms/work.js';
 import { importRegistryPreview, parseRegistryXml } from './import-registr-vinic.js';
 import { machineForm } from './forms/machine.js';
+import { purchaseForm } from './forms/purchase.js';
 
 export const actions = {
   'go': el => { location.hash = el.dataset.href; },
@@ -76,6 +77,8 @@ export const actions = {
   },
   'edit-product': el => productForm(byId(db.products, el.dataset.id)),
   'add-machine-row': () => $('#machine-rows').insertAdjacentHTML('beforeend', machineRow()),
+  'new-purchase': el => purchaseForm(null, el.dataset.id),
+  'edit-purchase': el => purchaseForm(byId(db.purchases, el.dataset.id)),
   'new-machine': () => machineForm(),
   'edit-machine': el => machineForm(byId(db.machines, el.dataset.id)),
   'add-worker-row': () => $('#worker-rows').insertAdjacentHTML('beforeend', workerRow()),

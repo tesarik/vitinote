@@ -201,6 +201,8 @@ legend { font-weight: 700; font-size: .9rem; padding: 0 4px; }
 .chip { font: inherit; font-size: .85rem; text-align: left; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
   border-radius: 8px; padding: 3px 8px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip:hover { border-color: var(--accent); }
+.stock { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; align-self: center; }
+.stock.negative { color: var(--danger); }
 .chip.planned { background: var(--warn-soft); border-color: var(--warn); }
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
 

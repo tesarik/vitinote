@@ -1,7 +1,7 @@
 // Offline cache: odpovídá z cache, na pozadí stahuje novou verzi (stale-while-revalidate).
-const CACHE = 'vitinote-v22';
+const CACHE = 'vitinote-v23';
 const ASSETS = ['./', './index.html', './style.css', './manifest.webmanifest', './icon.svg',
-  './js/actions.js', './js/data.js', './js/dialog.js', './js/forms/activity.js', './js/forms/machine.js', './js/forms/product.js', './js/forms/vineyard.js', './js/forms/work.js', './js/forms/worker.js', './js/import-registr-vinic.js', './js/main.js', './js/por-limits.js', './js/registry-por.js', './js/storage.js', './js/util.js', './js/view-state.js', './js/views.js',
+  './js/actions.js', './js/data.js', './js/dialog.js', './js/forms/activity.js', './js/forms/machine.js', './js/forms/product.js', './js/forms/purchase.js', './js/forms/vineyard.js', './js/forms/work.js', './js/forms/worker.js', './js/import-registr-vinic.js', './js/main.js', './js/por-limits.js', './js/registry-por.js', './js/storage.js', './js/util.js', './js/view-state.js', './js/views.js',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

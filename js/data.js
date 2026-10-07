@@ -21,7 +21,7 @@ export const activityIdFor = name => 'act-' + name.normalize('NFD').replace(/[\u
 export const defaultActivities = () => DEFAULT_ACTIVITIES.map(([name, kind]) => ({ id: activityIdFor(name), name, kind, hidden: false }));
 
 // `migrated` = jednorázové převody, které už proběhly (nesmí se opakovat nad daty, která uživatel mezitím změnil).
-export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], machines: [], products: [], works: [] });
+export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], machines: [], products: [], purchases: [], works: [] });
 
 // Doplní chybějící kolekce a převede starší tvary dat (jedna odrůda jako text → seznam odrůd).
 export function normalizeDb(d) {
@@ -169,6 +169,21 @@ export function workSearchText(w) {
     ...(w.workers || []).map(e => workerName(e.workerId)),
     ...(w.machines || []).map(e => machineName(e.machineId)),
   ].filter(Boolean).join(' '));
+}
+
+// Sklad: nákupy (a opravy stavu) minus spotřeba v provedených postřicích.
+export function stockOf(productId) {
+  const bought = db.purchases.filter(m => m.productId === productId).reduce((s, m) => s + (+m.qty || 0), 0);
+  const used = db.works.filter(w => !isPlanned(w))
+    .reduce((s, w) => s + (w.products || []).filter(p => p.productId === productId).reduce((t, p) => t + productAmount(w, p), 0), 0);
+  return Math.round((bought - used) * 1000) / 1000;
+}
+
+// Cena za jednotku: vážený průměr nákupů s cenou, jinak ručně zadaná cena přípravku.
+export function unitPrice(prod) {
+  const priced = db.purchases.filter(m => m.productId === prod?.id && m.price > 0 && m.qty > 0);
+  const qty = priced.reduce((s, m) => s + m.qty, 0);
+  return qty ? priced.reduce((s, m) => s + m.price, 0) / qty : (prod?.price ?? null);
 }
 
 // Ošetřená plocha postřiku: zadaná (jen část vinice), jinak celá výměra vinice.

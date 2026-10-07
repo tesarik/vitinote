@@ -1,6 +1,6 @@
 // Stránky aplikace (render* vrací HTML) a router podle location.hash.
 import { $, $$, addDays, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isoWeek, isPlanned, options, sortByName, thisMonth, today, weekday, WEEKDAYS } from './util.js';
-import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, machineName, periodRange, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, varietyNames, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
+import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, machineName, periodRange, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, stockOf, unitPrice, varietyNames, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
 import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
@@ -344,8 +344,13 @@ export function renderProducts() {
           p.phiDays ? `OL až ${p.phiDays} dní` : 'bez OL',
           p.defaultDose ? `obvyklá dávka ${fmtNum(p.defaultDose)} ${esc(p.unit)}/ha` : '',
           `${yearLabel()} spotřebováno ${fmtNum(used[p.id] || 0)} ${esc(p.unit)}`,
+          unitPrice(p) ? `${fmtNum(unitPrice(p))} Kč/${esc(p.unit)}` : '',
         ].filter(Boolean).join(' · ')}</div>
         ${p.note ? `<div class="item-note">${esc(p.note)}</div>` : ''}
+      </div>
+      <div class="item-actions">
+        <span class="stock${stockOf(p.id) < 0 ? ' negative' : ''}" title="Zásoba: nákupy minus spotřeba">${fmtNum(stockOf(p.id))} ${esc(p.unit)}</span>
+        <button class="btn sm" data-action="new-purchase" data-id="${p.id}">+ Nákup</button>
       </div>
     </li>`;
   }).join('');
@@ -355,6 +360,7 @@ export function renderProducts() {
       <button class="btn primary" data-action="new-product">+ Přidat</button>
     </div>
     <div class="card">${rows ? `<ul class="list">${rows}</ul>` : '<p class="empty">Zatím žádné přípravky.</p>'}</div>
+    ${renderPurchases()}
     <div class="card">
       <h2>Registr přípravků ÚKZÚZ</h2>
       <p class="small muted">${registry
@@ -362,6 +368,30 @@ export function renderProducts() {
         : 'Registr zatím není stažený (potřebuje běžící server).'}
         Při přidání přípravku ho vyhledáš v registru a doplní se registrační číslo, povolená použití, dávky a ochranné lhůty.</p>
       <button class="btn" data-action="update-registry"${sync.state === 'local' ? ' disabled' : ''}>Aktualizovat z registru</button>
+    </div>`;
+}
+
+function renderPurchases() {
+  const list = db.purchases.filter(m => m.date.startsWith(selectedYear)).sort((a, b) => b.date.localeCompare(a.date));
+  const body = list.map(m => {
+    const prod = byId(db.products, m.productId);
+    return `
+      <tr data-action="edit-purchase" data-id="${m.id}" style="cursor:pointer">
+        <td>${fmtDate(m.date)}</td>
+        <td>${esc(prod?.name ?? '(smazaný)')}${m.note ? `<div class="small muted">${esc(m.note)}</div>` : ''}</td>
+        <td class="num">${fmtNum(m.qty)} ${esc(prod?.unit ?? '')}</td>
+        <td class="num">${m.price ? `${fmtNum(m.price, 0)} Kč` : '–'}</td>
+      </tr>`;
+  }).join('');
+  return `
+    <div class="card">
+      <h2>Nákupy ${selectedYear}</h2>
+      ${body ? `<div class="table-wrap"><table>
+        <thead><tr><th>Datum</th><th>Přípravek</th><th class="num">Množství</th><th class="num">Cena</th></tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot><tr><td colspan="3">Celkem</td><td class="num">${fmtNum(list.reduce((s, m) => s + (+m.price || 0), 0), 0)} Kč</td></tr></tfoot>
+      </table></div>` : `<p class="small muted">Nákup zapíšeš tlačítkem „+ Nákup“ u přípravku. Zásoba = nákupy minus spotřeba v postřicích;
+        po inventuře zapiš rozdíl jako záporné množství.</p>`}
     </div>`;
 }
 
