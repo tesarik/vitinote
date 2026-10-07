@@ -422,8 +422,8 @@ test('registr ÚKZÚZ: aktualizace, přípravek z registru, použití u postřik
   await page.goto(base + '#/nastaveni');
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-por]')]);
   const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8');
-  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;1,5;kg;1,5;;černá skvrnitost révy;AT/);
-  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;2;kg;2;;plíseň révová;21/);
+  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;1,5;kg;1,5;;černá skvrnitost révy;;AT/);
+  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;2;kg;2;;plíseň révová;;21/);
 }));
 
 test('sklizeň v ochranné lhůtě: upozornění ve formuláři a potvrzení', () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
@@ -742,6 +742,49 @@ test('ošetřená plocha: jen část vinice, spotřeba a evidence POR podle ní'
     vineyards: [{ id: 'v1', name: 'A', area: 1, varieties: [] }, { id: 'v2', name: 'B', area: 2, varieties: [] }],
     products: [{ id: 'p1', name: 'Fungi', kind: 'Fungicid', unit: 'l' }],
   },
+}));
+
+test('povolené použití: hlídání počtu aplikací, odstupu a fenofáze BBCH', () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
+  // Pevné datum, aby minulé postřiky byly vždy ve stejném roce (i v lednu).
+  await page.clock.setFixedTime(new Date(2026, 6, 15, 10));
+  await page.reload();
+  await saved(page);
+  const spray = async bbch => {
+    await page.click('.topbar [data-action=new-work]');
+    await page.selectOption('[name=activityId]', { label: 'Postřik' });
+    await page.check('input[name=vineyards] >> nth=0');
+    await page.selectOption('[name=p-id]', { label: 'Cupro' });
+    assert.match(await page.textContent('[name=p-use] option:checked'), /max\. 2× za rok, odstup 10 dní, BBCH 15–77/);
+    await page.fill('[name=bbch]', String(bbch));
+    await page.click('#dlg button[type=submit]');
+  };
+  answerDialogs(false);
+  await spray(80);
+  const msg = dialogs.at(-1);
+  assert.match(msg, /3\. aplikace v roce \(povoleno max\. 2×\)/);
+  assert.match(msg, /uplyne jen 5 dní, odstup má být aspoň 10 dní/);
+  assert.match(msg, /fenofáze BBCH 80 je mimo povolené období \(BBCH 15–77\)/);
+  assert.equal(readData().works.length, 2, 'po odmítnutí se nic neuloží');
+
+  answerDialogs(true);
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  const w = readData().works.at(-1);
+  assert.equal(w.bbch, 80);
+  await page.goto(page.url().replace(/#.*$/, '') + '#/prace');
+  assert.match(await text(page, '.list'), /BBCH 80/);
+}, {
+  initialData: (() => {
+    const use = { id: 'u1', crops: ['Réva moštová'], pest: 'plíseň révová', phi: '21', phiDays: 21, dose: '2 kg/ha', doseMax: 2, doseUnit: 'kg/ha',
+      note: '1) od: 15 BBCH, do: 77 BBCH3) max. 2x za rok, v intervalu 10 dnů' };
+    const sprayWork = (id, date) => ({ id, vineyardId: 'v1', date, type: 'Postřik', status: 'done', workers: [], products: [{ productId: 'p1', dose: 2, useId: 'u1' }] });
+    return {
+      version: 1, workers: [],
+      vineyards: [{ id: 'v1', name: 'A', area: 1, varieties: [] }],
+      products: [{ id: 'p1', name: 'Cupro', kind: 'Fungicid', unit: 'kg', regNo: '9001-1', uses: [use] }],
+      works: [sprayWork('a', '2026-06-15'), sprayWork('b', '2026-07-10')],
+    };
+  })(),
 }));
 
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {

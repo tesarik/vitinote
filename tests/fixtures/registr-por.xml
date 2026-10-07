@@ -22,7 +22,7 @@
         <PLODINA><KOD>2</KOD><TYP>PL</TYP><SHODA>false</SHODA><NAZEV>Réva stolní</NAZEV></PLODINA>
         <SO>plíseň révová</SO>
         <DAVKA>2 kg/ha, 200-1000 l vody/ha</DAVKA>
-        <POZNAMKA>max. 3x</POZNAMKA>
+        <POZNAMKA>1) od: 15 BBCH, do: 77 BBCH3) max. 3x za rok, v intervalu 10 dnů</POZNAMKA>
         <DAVKOVANI><MAX_DAVKA>2</MAX_DAVKA><MIN_DAVKA>2</MIN_DAVKA><MJ>kg/ha</MJ><MJ_VODY>l/ha</MJ_VODY></DAVKOVANI>
         <ID>101</ID>
       </POUZITI>

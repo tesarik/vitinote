@@ -98,7 +98,7 @@ export const actions = {
   },
   'export-por': () => {
     const year = $('#export-year').value;
-    const rows = [['Datum od', 'Datum do', 'Vinice', 'Kód DPB', 'Plodina', 'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Reg. číslo', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství', 'Voda l/ha', 'Účel', 'Ochranná lhůta']];
+    const rows = [['Datum od', 'Datum do', 'Vinice', 'Kód DPB', 'Plodina', 'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Reg. číslo', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství', 'Voda l/ha', 'Účel', 'BBCH', 'Ochranná lhůta']];
     for (const w of sortWorksDesc(db.works).reverse()) {
       if (isPlanned(w) || !inPeriod(w, year)) continue;
       const v = byId(db.vineyards, w.vineyardId);
@@ -107,7 +107,7 @@ export const actions = {
         rows.push([
           w.date, w.dateTo ?? '', v ? vName(v) : '', v?.dpb ?? '', isPrep(v) ? 'bez plodiny (příprava na výsadbu)' : 'réva vinná', treatedArea(w), prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
           p.dose ?? '', prod?.unit ?? '', Math.round(productAmount(w, p) * 1000) / 1000, w.water ?? '', p.pest || w.target,
-          p.useId ? p.phi : (prod?.phiDays ?? ''),
+          w.bbch ?? '', p.useId ? p.phi : (prod?.phiDays ?? ''),
         ]);
       }
     }

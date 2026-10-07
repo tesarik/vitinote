@@ -148,6 +148,15 @@ export function productStatus(p, at = today()) {
   return null;
 }
 
+// Data (konec práce) provedených postřiků přípravkem na vinici, vzestupně; volitelně jen v daném roce.
+export function sprayDates(vineyardId, productId, { year, excludeId } = {}) {
+  return db.works
+    .filter(w => w.vineyardId === vineyardId && !isPlanned(w) && w.id !== excludeId && (!year || w.date.startsWith(year))
+      && (w.products || []).some(p => p.productId === productId))
+    .map(workEnd)
+    .sort();
+}
+
 // Ošetřená plocha postřiku: zadaná (jen část vinice), jinak celá výměra vinice.
 export const treatedArea = w => w.treatedArea ?? byId(db.vineyards, w.vineyardId)?.area ?? 0;
 

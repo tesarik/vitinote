@@ -1,10 +1,11 @@
 // Formulář práce: pracovníci, přípravky s povoleným použitím, sklizeň po odrůdách.
-import { $, $$, byId, esc, fmtDate, fmtNum, numVal, options, parseNum, sortByName, toast, today, uid } from '../util.js';
-import { db, isPrep, phiInfo, plantedVineyards, productStatus, selectableActivities, sortVineyards, vName } from '../data.js';
+import { $, $$, byId, daysBetween, esc, fmtDate, fmtNum, numVal, options, parseNum, sortByName, toast, today, uid } from '../util.js';
+import { db, isPrep, phiInfo, plantedVineyards, productStatus, selectableActivities, sortVineyards, sprayDates, vineyardName, vName } from '../data.js';
 import { convertDose, useLabel } from '../registry-por.js';
 import { selectedYear, setYear } from '../view-state.js';
 import { form, openForm } from '../dialog.js';
 import { vineyardForm } from './vineyard.js';
+import { bbchAllowed, limitsLabel, useLimits } from '../por-limits.js';
 
 export const workerRow = (e = {}) => `
   <div class="row row-worker">
@@ -77,6 +78,31 @@ export function refreshHarvestVarieties() {
 export const workPlaces = () => [...sortVineyards(plantedVineyards()), ...sortVineyards(db.vineyards.filter(isPrep))];
 export const placeName = v => (isPrep(v) ? `${vName(v)} (příprava)` : vName(v));
 
+// Kontrola povoleného použití z registru: počet aplikací za rok, odstup od minulé aplikace, fenofáze.
+function sprayWarnings(products, vineyardIds, date, bbch, excludeId) {
+  const warnings = [];
+  for (const p of products) {
+    const prod = byId(db.products, p.productId);
+    const use = prod?.uses?.find(u => u.id === p.useId);
+    if (!use) continue;
+    const limits = useLimits(use);
+    for (const vineyardId of vineyardIds) {
+      const prior = sprayDates(vineyardId, p.productId, { year: date.slice(0, 4), excludeId });
+      if (limits.maxApplications && prior.length >= limits.maxApplications) {
+        warnings.push(`${prod.name}: na vinici ${vineyardName(vineyardId)} by to byla ${prior.length + 1}. aplikace v roce (povoleno max. ${limits.maxApplications}×).`);
+      }
+      const last = prior.filter(d => d <= date).at(-1);
+      if (limits.minIntervalDays && last && daysBetween(last, date) < limits.minIntervalDays) {
+        warnings.push(`${prod.name}: od minulé aplikace na vinici ${vineyardName(vineyardId)} (${fmtDate(last)}) uplyne jen ${daysBetween(last, date)} dní, odstup má být aspoň ${limits.minIntervalDays} dní.`);
+      }
+    }
+    if (bbch != null && !bbchAllowed(limits.bbch, bbch)) {
+      warnings.push(`${prod.name}: fenofáze BBCH ${bbch} je mimo povolené období (${limitsLabel({ ...limits, maxApplications: null, minIntervalDays: null })}).`);
+    }
+  }
+  return warnings;
+}
+
 export function workForm(w, { copy = false, vineyardId = '', planned = false } = {}) {
   const isNew = !w || copy;
   const src = w || {};
@@ -123,7 +149,10 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
           <div class="field"><label>Ošetřená plocha (ha)</label><input name="treatedArea" inputmode="decimal" value="${numVal(data.treatedArea)}"></div>
           <div class="field"><label>Voda (l/ha)</label><input name="water" inputmode="decimal" value="${numVal(data.water)}"></div>
         </div>
-        <div class="field"><label>Proti čemu / účel</label><input name="target" value="${esc(data.target)}" placeholder="např. peronospora"></div>
+        <div class="grid2">
+          <div class="field"><label>Fenofáze (BBCH)</label><input name="bbch" inputmode="numeric" value="${data.bbch ?? ''}" placeholder="např. 61"></div>
+          <div class="field"><label>Proti čemu / účel</label><input name="target" value="${esc(data.target)}" placeholder="např. peronospora"></div>
+        </div>
         ${db.products.length ? '' : '<p class="small muted">Přípravky přidáš v sekci Přípravky.</p>'}
       </fieldset>
       <fieldset id="harvest-section">
@@ -197,6 +226,9 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
         const status = productStatus(prod, get('date'));
         if (status?.level === 'danger' && !confirm(`${prod.name}: ${status.text}. Opravdu zapsat?`)) return false;
       }
+      const bbch = parseNum(get('bbch'));
+      const warnings = sprayWarnings(products, vineyardIds, get('date'), bbch, isNew ? undefined : w.id);
+      if (warnings.length && !confirm(`${warnings.join('\n')}\n\nOpravdu zapsat?`)) return false;
       // Sklizeň v ochranné lhůtě.
       if (kind === 'harvest' && get('status') === 'done') {
         const block = phiInfo(vineyardIds[0], { at: get('date'), excludeId: isNew ? undefined : w.id });
@@ -207,6 +239,7 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
         status: get('status'), activityId, workers, products,
         treatedArea: hasProducts && vineyardIds.length === 1 && treated != null && treated !== fullArea ? treated : null,
         water: hasProducts ? parseNum(get('water')) : null,
+        bbch: hasProducts ? bbch : null,
         target: hasProducts ? (get('target') || [...new Set(products.map(p => p.pest).filter(Boolean))].join(', ')) : '',
         harvest: kind === 'harvest'
           ? $$('.row-harvest', form)

@@ -1,6 +1,7 @@
 // Registr přípravků na ochranu rostlin (ÚKZÚZ): výtah pro révu z api/por, vyhledávání, převody.
 import { fold } from './util.js';
 import { PRODUCT_KINDS, db } from './data.js';
+import { limitsLabel, useLimits } from './por-limits.js';
 
 // Výtah přípravků pro révu, který připravuje server.py (api/por). Bez serveru je null.
 export let registry = null;
@@ -49,4 +50,5 @@ export function refreshLinkedProducts() {
   return n;
 }
 
-export const useLabel = u => [u.pest || 'bez uvedení škodlivého organismu', u.dose, u.phi ? `OL ${u.phi}` : ''].filter(Boolean).join(' · ');
+export const useLabel = u => [u.pest || 'bez uvedení škodlivého organismu', u.dose, u.phi ? `OL ${u.phi}` : '', limitsLabel(useLimits(u))]
+  .filter(Boolean).join(' · ');
