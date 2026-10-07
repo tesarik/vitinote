@@ -1,6 +1,6 @@
 // Akce tlačítek (data-action) a obsluha událostí ve stránce.
 import { $, $$, byId, download, fmtNum, isPlanned, toCsv, toast, today } from './util.js';
-import { activityName, db, emptyDb, harvestKg, harvestSummary, inPeriod, isPrep, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
+import { activityName, db, emptyDb, EPPO_VINE, harvestKg, harvestSummary, inPeriod, isPrep, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
 import { save } from './storage.js';
 import { findPor, loadRegistry, refreshLinkedProducts } from './registry-por.js';
 import { setWorkersPeriod, setYear, workFilters } from './view-state.js';
@@ -98,21 +98,34 @@ export const actions = {
   },
   'export-por': () => {
     const year = $('#export-year').value;
-    const rows = [['Datum od', 'Datum do', 'Vinice', 'Kód DPB', 'Plodina', 'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Reg. číslo', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství', 'Voda l/ha', 'Účel', 'BBCH', 'Ochranná lhůta']];
+    // Sloupce pokrývají obsah záznamu podle prováděcího nařízení (EU) 2023/564 (příloha): přípravek a číslo povolení,
+    // datum a čas zahájení, dávka na ha, místo (díl LPIS), ošetřená plocha, plodina s kódem EPPO, fenofáze BBCH.
+    const rows = [['Datum od', 'Datum do', 'Čas zahájení', 'Vinice', 'Katastrální území', 'Kód DPB', 'Plodina', 'Kód EPPO', 'BBCH',
+      'Ošetřená plocha (ha)', 'Přípravek / hnojivo', 'Reg. číslo (povolení)', 'Druh', 'Dávka na ha', 'Jednotka', 'Celkové množství',
+      'Voda l/ha', 'Účel', 'Ochranná lhůta']];
+    const missing = { regNo: 0, dpb: 0 };
     for (const w of sortWorksDesc(db.works).reverse()) {
       if (isPlanned(w) || !inPeriod(w, year)) continue;
       const v = byId(db.vineyards, w.vineyardId);
       for (const p of w.products || []) {
         const prod = byId(db.products, p.productId);
+        if (prod?.kind !== 'Hnojivo') {
+          if (!prod?.regNo) missing.regNo++;
+          if (!v?.dpb) missing.dpb++;
+        }
         rows.push([
-          w.date, w.dateTo ?? '', v ? vName(v) : '', v?.dpb ?? '', isPrep(v) ? 'bez plodiny (příprava na výsadbu)' : 'réva vinná', treatedArea(w), prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
+          w.date, w.dateTo ?? '', w.startTime ?? '', v ? vName(v) : '', v?.ku ?? '', v?.dpb ?? '',
+          isPrep(v) ? 'bez plodiny (příprava na výsadbu)' : 'réva vinná', isPrep(v) ? '' : EPPO_VINE, w.bbch ?? '',
+          treatedArea(w), prod?.name ?? '(smazaný)', prod?.regNo ?? '', prod?.kind ?? '',
           p.dose ?? '', prod?.unit ?? '', Math.round(productAmount(w, p) * 1000) / 1000, w.water ?? '', p.pest || w.target,
-          w.bbch ?? '', p.useId ? p.phi : (prod?.phiDays ?? ''),
+          p.useId ? p.phi : (prod?.phiDays ?? ''),
         ]);
       }
     }
     if (rows.length === 1) { toast(`V roce ${year} nejsou žádná ošetření.`); return; }
     download(`vitinote-evidence-por-${year}.csv`, toCsv(rows), 'text/csv;charset=utf-8');
+    const gaps = [missing.regNo && `reg. číslo přípravku u ${missing.regNo}`, missing.dpb && `kód DPB vinice u ${missing.dpb}`].filter(Boolean);
+    if (gaps.length) toast(`Export hotový, ale chybí ${gaps.join(' a ')} záznamů – doplň je u přípravků a vinic.`);
   },
   'wipe': () => {
     if (!confirm('Opravdu nevratně smazat všechna data? Doporučuji nejdřív stáhnout zálohu.')) return;

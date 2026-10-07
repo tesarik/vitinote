@@ -385,6 +385,9 @@ export function renderSettings() {
         <button class="btn" data-action="export-works">Deník prací (CSV)</button>
         <button class="btn" data-action="export-por">Evidence POR / hnojiv (CSV)</button>
       </div>
+      <p class="small muted">Evidence POR obsahuje údaje, které od 1. 1. 2026 vyžaduje nařízení (EU) 2023/564: přípravek a číslo povolení,
+        datum a čas zahájení, dávku, díl LPIS (DPB), ošetřenou plochu, plodinu s kódem EPPO a fenofázi BBCH. CSV je strojově čitelný
+        formát. Předávání XML do JUDPOR / EPH je v ČR povinné jen při výměře nad 200 ha.</p>
     </div>
     <div class="card">
       <div class="page-head"><h2>Činnosti</h2><button class="btn sm" data-action="new-activity">+ Přidat činnost</button></div>

@@ -150,9 +150,10 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
           <div class="field"><label>Voda (l/ha)</label><input name="water" inputmode="decimal" value="${numVal(data.water)}"></div>
         </div>
         <div class="grid2">
+          <div class="field"><label>Čas zahájení</label><input type="time" name="startTime" value="${esc(data.startTime)}"></div>
           <div class="field"><label>Fenofáze (BBCH)</label><input name="bbch" inputmode="numeric" value="${data.bbch ?? ''}" placeholder="např. 61"></div>
-          <div class="field"><label>Proti čemu / účel</label><input name="target" value="${esc(data.target)}" placeholder="např. peronospora"></div>
         </div>
+        <div class="field"><label>Proti čemu / účel</label><input name="target" value="${esc(data.target)}" placeholder="např. peronospora"></div>
         ${db.products.length ? '' : '<p class="small muted">Přípravky přidáš v sekci Přípravky.</p>'}
       </fieldset>
       <fieldset id="harvest-section">
@@ -240,6 +241,7 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
         treatedArea: hasProducts && vineyardIds.length === 1 && treated != null && treated !== fullArea ? treated : null,
         water: hasProducts ? parseNum(get('water')) : null,
         bbch: hasProducts ? bbch : null,
+        startTime: hasProducts ? get('startTime') || null : null,
         target: hasProducts ? (get('target') || [...new Set(products.map(p => p.pest).filter(Boolean))].join(', ')) : '',
         harvest: kind === 'harvest'
           ? $$('.row-harvest', form)

@@ -422,8 +422,8 @@ test('registr ÚKZÚZ: aktualizace, přípravek z registru, použití u postřik
   await page.goto(base + '#/nastaveni');
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-por]')]);
   const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8');
-  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;1,5;kg;1,5;;černá skvrnitost révy;;AT/);
-  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;2;kg;2;;plíseň révová;;21/);
+  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;1,5;kg;1,5;;černá skvrnitost révy;AT/);
+  assert.match(csv, /Testcupro 50 WP;9001-1;Fungicid;2;kg;2;;plíseň révová;21/);
 }));
 
 test('sklizeň v ochranné lhůtě: upozornění ve formuláři a potvrzení', () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
@@ -735,7 +735,7 @@ test('ošetřená plocha: jen část vinice, spotřeba a evidence POR podle ní'
   await page.goto(base + '#/nastaveni');
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-por]')]);
   const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8');
-  assert.match(csv, /réva vinná;0,4;Fungi;;Fungicid;2;l;0,8;/);
+  assert.match(csv, /réva vinná;VITVI;;0,4;Fungi;;Fungicid;2;l;0,8;/);
 }, {
   initialData: {
     version: 1, workers: [], works: [],
@@ -785,6 +785,45 @@ test('povolené použití: hlídání počtu aplikací, odstupu a fenofáze BBCH
       works: [sprayWork('a', '2026-06-15'), sprayWork('b', '2026-07-10')],
     };
   })(),
+}));
+
+test('evidence POR podle nařízení (EU) 2023/564: všechny údaje v exportu a upozornění na chybějící', () => withApp(async ({ page }) => {
+  await page.click('.topbar [data-action=new-work]');
+  await page.selectOption('[name=activityId]', { label: 'Postřik' });
+  await page.check('input[name=vineyards] >> nth=0');
+  await page.fill('[name=startTime]', '06:30');
+  await page.fill('[name=bbch]', '57');
+  await page.selectOption('[name=p-id]', { label: 'Cupro' });
+  await page.fill('[name=p-dose]', '2');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  await page.click('.topbar [data-action=new-work]');
+  await page.selectOption('[name=activityId]', { label: 'Postřik' });
+  await page.check('input[name=vineyards] >> nth=1');
+  await page.selectOption('[name=p-id]', { label: 'Bez čísla' });
+  await page.fill('[name=p-dose]', '1');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+
+  await page.goto(page.url().replace(/#.*$/, '') + '#/nastaveni');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-por]')]);
+  const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8').replace(/^﻿/, '').split('\r\n');
+  assert.equal(csv[0], 'Datum od;Datum do;Čas zahájení;Vinice;Katastrální území;Kód DPB;Plodina;Kód EPPO;BBCH;Ošetřená plocha (ha);'
+    + 'Přípravek / hnojivo;Reg. číslo (povolení);Druh;Dávka na ha;Jednotka;Celkové množství;Voda l/ha;Účel;Ochranná lhůta');
+  assert.equal(csv[1], `${isoDaysAgo(0)};;06:30;A;Testov;600-1100 0101/1;réva vinná;VITVI;57;1;Cupro;9001-1;Fungicid;2;kg;2;;;21`);
+  assert.match(await text(page, '#toast'), /chybí reg\. číslo přípravku u 1 a kód DPB vinice u 1 záznamů/);
+}, {
+  initialData: {
+    version: 1, workers: [], works: [],
+    vineyards: [
+      { id: 'v1', name: 'A', area: 1, ku: 'Testov', dpb: '600-1100 0101/1', varieties: [] },
+      { id: 'v2', name: 'B', area: 1, varieties: [] },
+    ],
+    products: [
+      { id: 'p1', name: 'Cupro', kind: 'Fungicid', unit: 'kg', regNo: '9001-1', phiDays: 21 },
+      { id: 'p2', name: 'Bez čísla', kind: 'Fungicid', unit: 'l' },
+    ],
+  },
 }));
 
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {

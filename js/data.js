@@ -2,6 +2,8 @@
 import { addDays, byId, daysBetween, fmtDate, fmtNum, isPlanned, pad, today } from './util.js';
 
 export const DB_KEY = 'vitinote:v1';
+// Kód EPPO plodiny pro evidenci POR (Vitis vinifera).
+export const EPPO_VINE = 'VITVI';
 export const PRODUCT_KINDS = ['Fungicid', 'Insekticid', 'Akaricid', 'Herbicid', 'Hnojivo', 'Jiné'];
 
 // Číselník činností: chování určuje, jaká pole má formulář práce (přípravky / sklizeň).
