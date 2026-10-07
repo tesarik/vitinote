@@ -151,6 +151,20 @@ export function initActions() {
   // Zavření dialogu klepnutím mimo něj.
   dlg.addEventListener('click', e => { if (e.target === dlg) closeForm(); });
 
+  // Vyhledávání při psaní: překreslit seznam a vrátit kurzor do pole.
+  let searchTimer;
+  $('#main').addEventListener('input', e => {
+    if (e.target.dataset.filter !== 'q') return;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      workFilters.q = e.target.value;
+      render();
+      const input = $('[data-filter=q]');
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }, 200);
+  });
+
   $('#main').addEventListener('change', e => {
     const t = e.target;
     if (t.dataset.filter === 'workersPeriod') {

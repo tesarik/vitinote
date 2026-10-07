@@ -1,5 +1,5 @@
 // Datový model: konstanty, převody starších dat, stav `db` a doménová logika (období, ochranné lhůty…).
-import { addDays, byId, daysBetween, fmtDate, fmtNum, isPlanned, pad, today } from './util.js';
+import { addDays, byId, daysBetween, fmtDate, fmtNum, fold, isPlanned, pad, today } from './util.js';
 
 export const DB_KEY = 'vitinote:v1';
 // Kód EPPO plodiny pro evidenci POR (Vitis vinifera).
@@ -157,6 +157,15 @@ export function sprayDates(vineyardId, productId, { year, excludeId } = {}) {
       && (w.products || []).some(p => p.productId === productId))
     .map(workEnd)
     .sort();
+}
+
+// Text práce pro vyhledávání (bez diakritiky, malými písmeny): činnost, vinice, poznámka, přípravky, škůdci, lidé, sklizeň.
+export function workSearchText(w) {
+  const v = byId(db.vineyards, w.vineyardId);
+  return fold([
+    activityName(w), v?.name, v?.alias, w.note, w.target, productsSummary(w), harvestSummary(w),
+    ...(w.workers || []).map(e => workerName(e.workerId)),
+  ].filter(Boolean).join(' '));
 }
 
 // Ošetřená plocha postřiku: zadaná (jen část vinice), jinak celá výměra vinice.

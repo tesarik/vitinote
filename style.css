@@ -186,6 +186,7 @@ legend { font-weight: 700; font-size: .9rem; padding: 0 4px; }
 .por-info { background: var(--surface-2); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
 .por-info ul { margin: 6px 0 0; padding-left: 18px; }
 
+.search { margin-bottom: 8px; }
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
 
 table { width: 100%; border-collapse: collapse; font-size: .95rem; }

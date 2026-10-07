@@ -1,6 +1,6 @@
 // Stránky aplikace (render* vrací HTML) a router podle location.hash.
-import { $, $$, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, isPlanned, options, sortByName, thisMonth, today } from './util.js';
-import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, periodShare, phiInfo, plantedVineyards, productAmount, productStatus, productsSummary, sortVineyards, sortWorksDesc, vName, varietyNames, vineyardName, workHours, workerName } from './data.js';
+import { $, $$, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isPlanned, options, sortByName, thisMonth, today } from './util.js';
+import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, periodShare, phiInfo, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, varietyNames, vineyardName, vName, workerName, workHours, workSearchText } from './data.js';
 import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
@@ -110,7 +110,8 @@ export function renderWorks() {
     (!f.vineyardId || w.vineyardId === f.vineyardId) &&
     (!f.activityId || w.activityId === f.activityId) &&
     inPeriod(w, period) &&
-    (!f.status || (f.status === 'planned') === isPlanned(w))
+    (!f.status || (f.status === 'planned') === isPlanned(w)) &&
+    (!f.q || fold(f.q).split(/\s+/).every(word => workSearchText(w).includes(word)))
   ));
   const hours = works.filter(w => !isPlanned(w)).reduce((s, w) => s + workHours(w) * periodShare(w, period), 0);
   return `
@@ -118,13 +119,15 @@ export function renderWorks() {
       <h1>Práce ${selectedYear}</h1>
       <button class="btn primary" data-action="new-work">+ Zapsat práci</button>
     </div>
+    <input type="search" class="search" data-filter="q" value="${esc(f.q)}" aria-label="Hledat v pracích"
+      placeholder="Hledat: poznámka, přípravek, škůdce, pracovník…">
     <div class="filters">
       <select data-filter="vineyardId">${options(sortVineyards(db.vineyards).map(v => ({ id: v.id, name: vName(v) })), f.vineyardId, { empty: 'Všechny vinice' })}</select>
       <select data-filter="activityId">${options(db.activities, f.activityId, { empty: 'Všechny činnosti' })}</select>
       <select data-filter="month" aria-label="Měsíc">${monthOptions(f.month, 'Celý rok')}</select>
       <select data-filter="status">${options([{ id: 'done', name: 'Provedené' }, { id: 'planned', name: 'Plánované' }], f.status, { empty: 'Provedené i plánované' })}</select>
     </div>
-    <p class="muted small">${works.length} záznamů · ${fmtNum(hours, 1)} odpracovaných hodin</p>
+    <p class="muted small" data-q="${esc(f.q)}">${works.length} záznamů · ${fmtNum(hours, 1)} odpracovaných hodin</p>
     <div class="card">${workList(works)}</div>`;
 }
 

@@ -826,6 +826,33 @@ test('evidence POR podle nařízení (EU) 2023/564: všechny údaje v exportu a 
   },
 }));
 
+test('vyhledávání v pracích: poznámka, přípravek, pracovník, bez diakritiky, více slov', () => withApp(async ({ page }) => {
+  await page.goto(page.url().replace(/#.*$/, '') + '#/prace');
+  const search = async q => {
+    await page.fill('[data-filter=q]', q);
+    await page.waitForFunction(q => document.querySelector('main p.muted')?.dataset.q === q, q);
+    return text(page, 'main p.muted');
+  };
+  assert.match(await search('kupri'), /^1 záznamů/);
+  assert.match(await search('zlutá skvrna'), /^1 záznamů/, 'bez diakritiky, všechna slova');
+  assert.match(await search('petr'), /^2 záznamů/);
+  assert.match(await search('petr rez'), /^1 záznamů/);
+  assert.equal(await page.evaluate(() => document.activeElement?.dataset.filter), 'q', 'pole zůstane aktivní');
+  assert.match(await search('nic takového'), /^0 záznamů/);
+}, {
+  initialData: {
+    version: 1,
+    workers: [{ id: 'p1', name: 'Petr' }],
+    vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [] }],
+    products: [{ id: 'x', name: 'Kuprikol', kind: 'Fungicid', unit: 'kg' }],
+    works: [
+      { id: 'a', vineyardId: 'v1', date: isoDaysAgo(3), type: 'Postřik', status: 'done', workers: [], products: [{ productId: 'x', dose: 2 }] },
+      { id: 'b', vineyardId: 'v1', date: isoDaysAgo(2), type: 'Řez', status: 'done', workers: [{ workerId: 'p1', hours: 2 }], products: [], note: 'žlutá skvrna na listech' },
+      { id: 'c', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Vázání', status: 'done', workers: [{ workerId: 'p1', hours: 1 }], products: [] },
+    ],
+  },
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');
