@@ -1,5 +1,5 @@
 // Offline cache: odpovídá z cache, na pozadí stahuje novou verzi (stale-while-revalidate).
-const CACHE = 'vitinote-v15';
+const CACHE = 'vitinote-v16';
 const ASSETS = ['./', './index.html', './style.css', './manifest.webmanifest', './icon.svg',
   './js/actions.js', './js/data.js', './js/dialog.js', './js/forms/activity.js', './js/forms/product.js', './js/forms/vineyard.js', './js/forms/work.js', './js/forms/worker.js', './js/import-registr-vinic.js', './js/main.js', './js/registry-por.js', './js/storage.js', './js/util.js', './js/view-state.js', './js/views.js',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
@@ -20,7 +20,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
   // Data (api/) jdou vždy přímo na server, nikdy z cache.
-  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/api/')) return;
+  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/api/') || /\/log(in|out)$/.test(url.pathname)) return;
   e.respondWith(
     caches.open(CACHE).then(async cache => {
       const cached = await cache.match(req, { ignoreSearch: true });

@@ -12,7 +12,13 @@ import { dlg } from './dialog.js';
 export const DIRTY_KEY = 'vitinote:dirty';
 export const API_URL = 'api/data';
 
-export const sync = { state: 'pending', file: '', backups: '', keepBackups: 0 };
+export const sync = { state: 'pending', file: '', backups: '', keepBackups: 0, session: false };
+
+// Server chráněný heslem (přístup z jiného zařízení) a přihlášení vypršelo. Neodeslané změny zůstanou
+// v prohlížeči (příznak dirty) a odešlou se po přihlášení.
+function toLogin() {
+  location.href = 'login';
+}
 
 export function writeLocal() {
   try {
@@ -29,6 +35,7 @@ export const isDirty = () => { try { return !!localStorage.getItem(DIRTY_KEY); }
 
 export function setSync(state, res) {
   sync.state = state;
+  if (res) sync.session = res.headers.get('X-Auth') === 'session';
   if (res?.headers.get('X-Data-File')) sync.file = decodeURIComponent(res.headers.get('X-Data-File'));
   // „cesta;keep=30“ – kam server ukládá denní zálohy a kolik jich drží.
   const backups = res?.headers.get('X-Backups')?.match(/^(.*);keep=(\d+)$/);
@@ -63,6 +70,7 @@ export async function pushToServer() {
     do {
       pushAgain = false;
       res = await fetch(API_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(db) });
+      if (res.status === 401) return toLogin();
       if (!res.ok) throw new Error('HTTP ' + res.status);
     } while (pushAgain);
     setDirty(false);
@@ -81,6 +89,7 @@ export async function pullFromServer() {
   const changesBefore = localChanges;
   try {
     const res = await fetch(API_URL, { cache: 'no-store' });
+    if (res.status === 401) return toLogin();
     // Mezitím se uložila místní změna → nepřepisovat ji starší verzí ze serveru.
     if (localChanges !== changesBefore) return;
     if (res.status === 404 && res.headers.get('Content-Type')?.includes('json')) {

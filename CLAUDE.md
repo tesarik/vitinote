@@ -39,6 +39,10 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
 - `style.css` – barvy jako CSS proměnné na `:root`, tmavý režim přes `prefers-color-scheme`. Mobile-first.
 - `server.py` – obsluhuje jen soubory ze seznamu `STATIC_FILES` a moduly `js/**.js`, `GET/PUT /api/data` a registr přípravků (`GET /api/por`,
   `POST /api/por/update`). Zápis je atomický, předchozí verze dat jako `.bak`.
+- `auth.py` – heslo pro přístup z místní sítě (`--set-password`, `--lan` bez hesla nespustí). PBKDF2 hash v `heslo.json`,
+  přihlášení = podepsaná cookie (HMAC) na 90 dní. Chráněná je stránka aplikace a `/api/*`; z 127.0.0.1 se heslo nevyžaduje
+  (testy to vynutí `--auth-local`). Aplikace při 401 přejde na `login`.
+- Server po každém uložení drží denní zálohy v `zalohy/` vedle dat (posledních 30, `--keep-backups`).
 - `por_registry.py` – z exportu registru přípravků ÚKZÚZ (~100 MB XML, stahování trvá 1–3 min) vytáhne povolené přípravky
   s použitím pro révu do `por-reva.json` vedle datového souboru. Testy používají `--por-source tests/fixtures/registr-por.xml`.
 - `sw.js` – offline cache (stale-while-revalidate), `api/` nikdy necachuje.

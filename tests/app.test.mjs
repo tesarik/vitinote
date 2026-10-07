@@ -669,6 +669,41 @@ test('denní zálohy: po uložení vznikne záloha za dnešek a Data ji ukazují
   assert.match(await text(page, 'main'), /kopie za každý den do .*zalohy \(posledních 30 dní\)/);
 }));
 
+test('heslo: bez přihlášení přesměruje na přihlášení, API vrací 401, po přihlášení vše funguje', async () => {
+  const { browser } = await import('./helpers.mjs');
+  const server = await startServer({ password: 'tajne-heslo' });
+  const ctx = await (await browser()).newContext();
+  try {
+    assert.equal((await fetch(server.url + 'api/data')).status, 401);
+    assert.equal((await fetch(server.url + 'js/main.js')).status, 200, 'kód aplikace je veřejný');
+
+    const page = await ctx.newPage();
+    await page.goto(server.url);
+    assert.match(page.url(), /\/login$/);
+    await page.fill('[name=heslo]', 'spatne');
+    await page.click('button[type=submit]');
+    await page.waitForSelector('.error');
+    assert.match(await page.textContent('.error'), /Nesprávné heslo/);
+
+    await page.fill('[name=heslo]', 'tajne-heslo');
+    await page.click('button[type=submit]');
+    await page.waitForSelector('#sync[data-state=disk]', { state: 'attached' });
+    const cookie = (await ctx.cookies()).find(c => c.name === 'vitinote_session');
+    assert.ok(cookie.httpOnly && cookie.sameSite === 'Strict');
+    await addVineyard(page, { name: 'Za heslem' });
+
+    await page.goto(server.url + '#/nastaveni');
+    await page.click('text=Odhlásit');
+    await page.waitForURL(/\/login$/);
+    // Po odhlášení aplikace (i z offline cache) narazí na 401 a vrátí se na přihlášení.
+    await page.goto(server.url);
+    await page.waitForURL(/\/login$/);
+  } finally {
+    await ctx.close();
+    await server.stop();
+  }
+});
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');

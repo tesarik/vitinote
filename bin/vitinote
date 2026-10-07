@@ -2,7 +2,8 @@
 # Spustí VitiNote a otevře ho v prohlížeči.
 #
 #   bin/vitinote                 # http://localhost:8000
-#   bin/vitinote --lan           # přístup i z telefonu ve stejné síti
+#   bin/vitinote --set-password  # nastaví heslo pro přístup z jiných zařízení
+#   bin/vitinote --lan           # přístup i z telefonu ve stejné síti (chráněný heslem)
 #   bin/vitinote --port 9000 --data ~/vinarstvi/vitinote.json
 #   bin/vitinote --no-open       # neotevírat prohlížeč
 #
@@ -24,6 +25,7 @@ args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-open) open_browser=0 ;;
+    --set-password) open_browser=0; args+=("$1") ;;
     --port) port="${2:?--port vyžaduje číslo}"; args+=("$1" "$2"); shift ;;
     --port=*) port="${1#--port=}"; args+=("$1") ;;
     *) args+=("$1") ;;

@@ -437,7 +437,8 @@ export function renderSettings() {
       <p class="small muted">Nevratně smaže všechny vinice, práce, přípravky a pracovníky (v prohlížeči i v souboru na disku).</p>
       <button class="btn danger" data-action="wipe">Smazat všechna data</button>
     </div>
-    <p class="small muted">VitiNote · ${db.vineyards.length} vinic, ${db.works.length} záznamů prací</p>`;
+    <p class="small muted">VitiNote · ${db.vineyards.length} vinic, ${db.works.length} záznamů prací
+      ${sync.session ? ' · <a href="logout">Odhlásit</a>' : ''}</p>`;
 }
 export const routes = {
   '': renderDashboard,

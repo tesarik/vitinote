@@ -1,5 +1,5 @@
 // Spouští server.py s dočasným datovým souborem a prohlížeč pro jeden test.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -26,13 +26,19 @@ async function waitFor(fn, timeoutMs = 5000) {
   }
 }
 
-export async function startServer({ port, dataFile, porSource = join(FIXTURES, 'registr-por.xml') } = {}) {
+export async function startServer({ port, dataFile, porSource = join(FIXTURES, 'registr-por.xml'), password, args = [] } = {}) {
   port ??= await freePort();
   dataFile ??= join(mkdtempSync(join(tmpdir(), 'vitinote-test-')), 'data.json');
-  const proc = spawn('python3', [join(APP_DIR, 'server.py'), '--port', String(port), '--data', dataFile, '--por-source', porSource],
+  if (password) {
+    // Heslo se nastaví stejně jako `bin/vitinote --set-password`, jen ze stdin.
+    const r = spawnSync('python3', [join(APP_DIR, 'server.py'), '--data', dataFile, '--set-password'], { input: `${password}\n${password}\n` });
+    if (r.status !== 0) throw new Error(String(r.stderr));
+    args = ['--auth-local', ...args];
+  }
+  const proc = spawn('python3', [join(APP_DIR, 'server.py'), '--port', String(port), '--data', dataFile, '--por-source', porSource, ...args],
     { stdio: 'ignore', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
   const url = `http://localhost:${port}/`;
-  await waitFor(async () => (await fetch(url)).ok);
+  await waitFor(async () => (await fetch(url + 'icon.svg')).ok);
   return {
     url, port, dataFile,
     stop: () => new Promise(resolve => {
@@ -45,7 +51,7 @@ export async function startServer({ port, dataFile, porSource = join(FIXTURES, '
 
 let browserPromise;
 // CHROME_PATH umožní použít systémový Chrome místo prohlížeče staženého Playwrightem.
-const browser = () => (browserPromise ??= chromium.launch({ executablePath: process.env.CHROME_PATH || undefined }));
+export const browser = () => (browserPromise ??= chromium.launch({ executablePath: process.env.CHROME_PATH || undefined }));
 
 export async function closeBrowser() {
   if (browserPromise) await (await browserPromise.catch(() => null))?.close();

@@ -16,7 +16,8 @@ bin/vitinote                 # spustí server a otevře http://localhost:8000
 Parametry:
 
 ```sh
-bin/vitinote --lan           # dostupné i z telefonu ve stejné Wi-Fi
+bin/vitinote --set-password  # nastaví heslo pro přístup z jiných zařízení (jednou)
+bin/vitinote --lan           # dostupné i z telefonu ve stejné Wi-Fi, chráněné heslem
 bin/vitinote --port 9000     # jiný port
 bin/vitinote --data ~/vinarstvi/vitinote.json   # jiné umístění dat
 bin/vitinote --no-open       # neotevírat prohlížeč
@@ -30,10 +31,18 @@ ln -s "$PWD/bin/vitinote" ~/.local/bin/vitinote
 
 Bez skriptu (např. ve Windows): `python3 server.py`.
 
+## Přístup z telefonu
+
+`--lan` zpřístupní aplikaci ostatním zařízením v síti a vyžaduje heslo (`bin/vitinote --set-password`).
+Heslo je uložené jen jako hash v `data/heslo.json`; přihlášení vydrží 90 dní, změna hesla odhlásí všechna zařízení.
+Z počítače, na kterém server běží, se heslo nezadává. Spojení není šifrované (HTTP), takže heslo nepoužívej jinde
+a v cizích sítích `--lan` nespouštěj.
+
 ## Kde jsou data
 
 - Hlavní úložiště je JSON soubor na disku, výchozí `data/vitinote.json` (změníš přes `--data`).
   Zápis je atomický a předchozí verze zůstává jako `vitinote.json.bak`.
+- Denní zálohy: `data/zalohy/vitinote-RRRR-MM-DD.json` (posledních 30 dní, `--keep-backups N`).
 - Prohlížeč si drží kopii v localStorage. Když server neběží, změny se ukládají jen tam
   (v záhlaví svítí „Jen v prohlížeči“) a na disk se odešlou, jakmile je server znovu dostupný.
 
