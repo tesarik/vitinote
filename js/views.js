@@ -408,7 +408,9 @@ export function renderSettings() {
       <h2>Uložení</h2>
       ${sync.state === 'disk'
         ? `<p><span class="badge ok">na disku</span> <code class="small">${esc(sync.file)}</code></p>
-           <p class="small muted">Při každém uložení se předchozí verze zachová jako <code>.bak</code>.</p>`
+           <p class="small muted">Při každém uložení se předchozí verze zachová jako <code>.bak</code>.
+             ${sync.keepBackups ? `Navíc se ukládá kopie za každý den do <code>${esc(sync.backups)}</code> (posledních ${sync.keepBackups} dní);
+             obnovíš ji tlačítkem „Obnovit ze zálohy“ níže.` : ''}</p>`
         : `<p><span class="badge warn">jen v prohlížeči</span></p>
            <p class="small muted">Server není spuštěný. Změny se zatím drží v prohlížeči a na disk se zapíšou, až spustíš <code>python3 server.py</code> a stránku otevřeš znovu.</p>`}
     </div>

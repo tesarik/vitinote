@@ -19,6 +19,7 @@ import re
 import shutil
 import tempfile
 import threading
+from datetime import date
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -37,6 +38,7 @@ por_lock = threading.Lock()
 
 class Handler(SimpleHTTPRequestHandler):
     data_file: Path
+    keep_backups: int = 30
     por_source: str = por_registry.POR_EXPORT_URL
 
     @property
@@ -67,6 +69,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(400, {'error': str(e)})
         with write_lock:
             write_atomic(self.data_file, data)
+            daily_backup(self.data_file, self.keep_backups)
         self.send_json(200, {'ok': True})
 
     def do_POST(self):
@@ -96,6 +99,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Data-File', quote(str(self.data_file)))
+        self.send_header('X-Backups', f'{quote(str(backup_dir(self.data_file)))};keep={self.keep_backups}')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -138,16 +142,35 @@ def write_atomic(path: Path, data, indent=2, backup=True):
         raise
 
 
+def backup_dir(data_file: Path) -> Path:
+    return data_file.parent / 'zalohy'
+
+
+def daily_backup(data_file: Path, keep: int, today=None):
+    """Kopie dat za každý den (poslední stav dne) do zalohy/<jméno>-RRRR-MM-DD.json; drží `keep` nejnovějších dnů."""
+    if keep <= 0:
+        return
+    folder = backup_dir(data_file)
+    folder.mkdir(parents=True, exist_ok=True)
+    day = (today or date.today()).isoformat()
+    shutil.copy2(data_file, folder / f'{data_file.stem}-{day}.json')
+    backups = sorted(folder.glob(f'{data_file.stem}-????-??-??.json'))
+    for old in backups[:-keep]:
+        old.unlink()
+
+
 def main():
     ap = argparse.ArgumentParser(description='VitiNote server')
     ap.add_argument('--port', type=int, default=8000)
     ap.add_argument('--lan', action='store_true', help='naslouchat na všech rozhraních (přístup z telefonu)')
     ap.add_argument('--data', type=Path, default=APP_DIR / 'data' / 'vitinote.json', help='cesta k JSON souboru s daty')
+    ap.add_argument('--keep-backups', type=int, default=30, help='kolik denních záloh dat držet (0 = žádné)')
     ap.add_argument('--por-source', default=por_registry.POR_EXPORT_URL, help='zdroj registru přípravků (URL nebo soubor; pro testy)')
     args = ap.parse_args()
 
     Handler.data_file = args.data.expanduser().resolve()
     Handler.por_source = args.por_source
+    Handler.keep_backups = args.keep_backups
     host = '0.0.0.0' if args.lan else '127.0.0.1'
     server = ThreadingHTTPServer((host, args.port), partial(Handler, directory=str(APP_DIR)))
     print(f'VitiNote běží na http://localhost:{args.port}' + (' (i v místní síti)' if args.lan else ''))

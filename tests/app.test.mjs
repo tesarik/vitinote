@@ -655,6 +655,20 @@ test('vlastní název vinice: hlavní jméno všude, výchozí název menším p
   },
 }));
 
+test('denní zálohy: po uložení vznikne záloha za dnešek a Data ji ukazují', () => withApp(async ({ page, server }) => {
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { dirname } = await import('node:path');
+  await addVineyard(page, { name: 'Zálohovaná' });
+  const folder = join(dirname(server.dataFile), 'zalohy');
+  const files = readdirSync(folder);
+  assert.deepEqual(files, [`data-${isoDaysAgo(0)}.json`]);
+  assert.match(readFileSync(join(folder, files[0]), 'utf8'), /Zálohovaná/);
+  await page.goto(page.url().replace(/#.*$/, '') + '#/nastaveni');
+  await page.reload();
+  await page.waitForSelector('#sync[data-state=disk]', { state: 'attached' });
+  assert.match(await text(page, 'main'), /kopie za každý den do .*zalohy \(posledních 30 dní\)/);
+}));
+
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const sw = readFileSync(join(APP_DIR, 'sw.js'), 'utf8');

@@ -12,7 +12,7 @@ import { dlg } from './dialog.js';
 export const DIRTY_KEY = 'vitinote:dirty';
 export const API_URL = 'api/data';
 
-export const sync = { state: 'pending', file: '' };
+export const sync = { state: 'pending', file: '', backups: '', keepBackups: 0 };
 
 export function writeLocal() {
   try {
@@ -30,6 +30,9 @@ export const isDirty = () => { try { return !!localStorage.getItem(DIRTY_KEY); }
 export function setSync(state, res) {
   sync.state = state;
   if (res?.headers.get('X-Data-File')) sync.file = decodeURIComponent(res.headers.get('X-Data-File'));
+  // „cesta;keep=30“ – kam server ukládá denní zálohy a kolik jich drží.
+  const backups = res?.headers.get('X-Backups')?.match(/^(.*);keep=(\d+)$/);
+  if (backups) [sync.backups, sync.keepBackups] = [decodeURIComponent(backups[1]), Number(backups[2])];
   const el = $('#sync');
   el.dataset.state = state;
   el.textContent = { disk: 'Uloženo', saving: 'Ukládám…', local: 'Jen v prohlížeči', pending: '' }[state];
