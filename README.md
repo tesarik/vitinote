@@ -26,6 +26,7 @@ bin/vitinote --port 9000     # jiný port
 bin/vitinote --data ~/vinarstvi/vitinote.json   # jiné umístění dat
 bin/vitinote --keep-backups 60                   # kolik denních záloh držet (výchozí 30)
 bin/vitinote --no-open       # neotevírat prohlížeč
+bin/vitinote --php           # PHP verze serveru (jako na webhostingu) se stejnými daty; potřebuje PHP 8.1+
 ```
 
 Aby šel příkaz `vitinote` spouštět odkudkoli:
@@ -96,14 +97,21 @@ na webu Data → Stáhnout zálohu, doma Data → Obnovit ze zálohy. Denní zá
 
 ### Vyzkoušení webové verze lokálně (PHP)
 
-Před nahráním si můžeš sestavenou verzi spustit doma (potřebuje PHP 8.1+; pro aktualizaci registru i rozšíření php-xml):
+PHP verzi spustíš i doma (potřebuje PHP 8.1+, pro aktualizaci registru i rozšíření php-xml):
+
+```sh
+bin/vitinote --php                                   # ve složce projektu, stejná data jako Python verze
+```
+
+Stejně jako Python server pouští vestavěný PHP server bez hesla jen požadavky z tohoto počítače;
+na webhostingu (Apache) se heslo vyžaduje vždy. Sestavenou složku pro web vyzkoušíš i s přihlášením:
 
 ```sh
 bin/build-web --with-data
-cd dist/web && php -S localhost:8080 php/router.php
+cd dist/web && php -S localhost:8080 php/router.php  # přihlášení heslem z build-web jen přes jiné zařízení / test
 ```
 
-a otevřít http://localhost:8080 (přihlášení stejným heslem jako na webu). `php/router.php` dělá totéž co `.htaccess`.
+`php/router.php` dělá při `php -S` totéž co `.htaccess` na hostingu.
 
 ## Přístup z telefonu doma (--lan)
 

@@ -19,12 +19,16 @@ function config(): array
     if (is_file(APP_DIR . '/config.php')) {
         $cfg = array_merge($cfg, require APP_DIR . '/config.php');
     }
-    if (PHP_SAPI === 'cli-server') {   // jen testy / lokální vývoj, na webhostingu se nepoužije
+    // Vestavěný server PHP (php -S, bin/vitinote --php, testy) – na webhostingu (Apache) se nikdy nepoužije.
+    // Stejně jako server.py: z tohoto počítače bez hesla, z jiných zařízení s heslem;
+    // VITINOTE_AUTH_LOCAL=1 vyžaduje heslo i lokálně (testy, obdoba --auth-local).
+    if (PHP_SAPI === 'cli-server') {
         $env = fn(string $k) => getenv($k) === false ? null : getenv($k);
         $cfg['data_file'] = $env('VITINOTE_DATA') ?? $cfg['data_file'];
         $cfg['por_source'] = $env('VITINOTE_POR_SOURCE') ?? $cfg['por_source'];
         $cfg['keep_backups'] = (int)($env('VITINOTE_KEEP_BACKUPS') ?? $cfg['keep_backups']);
-        $cfg['no_auth'] = $env('VITINOTE_NO_AUTH') === '1';
+        $local = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
+        $cfg['no_auth'] = $local && $env('VITINOTE_AUTH_LOCAL') !== '1';
     }
     return $cfg;
 }

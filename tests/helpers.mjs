@@ -43,7 +43,7 @@ export async function startServer({ port, dataFile, porSource = join(FIXTURES, '
     // PHP verze (webhosting): vestavěný server s routerem místo .htaccess; nastavení přes proměnné prostředí.
     ? spawn('php', ['-S', `127.0.0.1:${port}`, '-t', APP_DIR, join(APP_DIR, 'php', 'router.php')], {
       stdio: 'ignore',
-      env: { ...process.env, VITINOTE_DATA: dataFile, VITINOTE_POR_SOURCE: porSource, VITINOTE_NO_AUTH: password ? '0' : '1' },
+      env: { ...process.env, VITINOTE_DATA: dataFile, VITINOTE_POR_SOURCE: porSource, VITINOTE_AUTH_LOCAL: password ? '1' : '0' },
     })
     : spawn('python3', [join(APP_DIR, 'server.py'), '--port', String(port), '--data', dataFile, '--por-source', porSource, ...args],
       { stdio: 'ignore', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });

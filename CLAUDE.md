@@ -45,8 +45,9 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
   `POST /api/por/update`). Zápis je atomický, předchozí verze dat jako `.bak`.
 - `api.php` + `php/lib.php`, `php/por_registry.php` – PHP verze serveru pro webhosting (Wedos). **Stejné API, stejné soubory
   (`vitinote.json`, `heslo.json`, `por-reva.json`, `zalohy/`) a stejný formát hesla a cookie jako Python verze.** Změnu API
-  vždy udělat v obou. Směrování: `.htaccess` (Apache) / `php/router.php` (`php -S`, testy). Na webu se heslo vyžaduje vždy
-  (bez `heslo.json` vrací 503). Nastavení `config.php` (vzor `config.example.php`), pro testy proměnné `VITINOTE_*`.
+  vždy udělat v obou. Směrování: `.htaccess` (Apache) / `php/router.php` (`php -S`, `bin/vitinote --php`, testy).
+  Na webu (Apache) se heslo vyžaduje vždy (bez `heslo.json` vrací 503); jen vestavěný `php -S` pouští bez hesla
+  požadavky z 127.0.0.1 jako server.py (`VITINOTE_AUTH_LOCAL=1` vyžaduje heslo i lokálně). Nastavení `config.php` (vzor `config.example.php`), pro testy proměnné `VITINOTE_*`.
   `bin/build-web` sestaví `dist/web/` k nahrání (gitignore – obsahuje heslo a případně data).
   Ukládání dat jde přes POST (některé hostingy blokují PUT); `POST /api/por/upload` nahraje hotový výtah registru.
 - `login.html` – přihlašovací stránka pro obě verze (`{error}` se nahradí).

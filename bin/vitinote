@@ -6,6 +6,7 @@
 #   bin/vitinote --lan           # přístup i z telefonu ve stejné síti (chráněný heslem)
 #   bin/vitinote --port 9000 --data ~/vinarstvi/vitinote.json
 #   bin/vitinote --no-open       # neotevírat prohlížeč
+#   bin/vitinote --php           # PHP verze serveru (jako na webhostingu) místo Pythonu, stejná data
 #
 # Ostatní parametry se předají server.py (viz python3 server.py --help).
 set -euo pipefail
@@ -21,10 +22,16 @@ APP_DIR="$(cd -P "$(dirname "$src")/.." && pwd)"
 
 open_browser=1
 port=8000
+backend=python
+lan=0
+data=""
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-open) open_browser=0 ;;
+    --php) backend=php ;;
+    --lan) lan=1; args+=("$1") ;;
+    --data) data="${2:?--data vyžaduje cestu}"; args+=("$1" "$2"); shift ;;
     --set-password) open_browser=0; args+=("$1") ;;
     --port) port="${2:?--port vyžaduje číslo}"; args+=("$1" "$2"); shift ;;
     --port=*) port="${1#--port=}"; args+=("$1") ;;
@@ -52,6 +59,15 @@ if [ "$open_browser" = 1 ]; then
       sleep 0.2
     done
   ) &
+fi
+
+if [ "$backend" = php ]; then
+  command -v php >/dev/null || { echo "PHP verze potřebuje příkaz php (PHP 8.1+)." >&2; exit 1; }
+  # Ostatní parametry (--keep-backups…) PHP verze bere z config.php; data a port z parametrů.
+  host=127.0.0.1; [ "$lan" = 1 ] && host=0.0.0.0
+  [ -n "$data" ] && export VITINOTE_DATA="$(cd "$(dirname "$data")" 2>/dev/null && pwd)/$(basename "$data")"
+  echo "VitiNote (PHP) běží na http://localhost:$port"
+  exec php -S "$host:$port" -t "$APP_DIR" "$APP_DIR/php/router.php"
 fi
 
 exec python3 "$APP_DIR/server.py" ${args[@]+"${args[@]}"}
