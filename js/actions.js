@@ -1,5 +1,5 @@
 // Akce tlačítek (data-action) a obsluha událostí ve stránce.
-import { $, $$, byId, download, fmtNum, isPlanned, toCsv, toast, today } from './util.js';
+import { $, $$, byId, download, fmtDate, fmtNum, isPlanned, toast, toCsv, today } from './util.js';
 import { activityName, db, emptyDb, EPPO_VINE, harvestKg, harvestSummary, inPeriod, isPrep, machineName, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
 import { save } from './storage.js';
 import { findPor, loadRegistry, refreshLinkedProducts } from './registry-por.js';
@@ -63,7 +63,7 @@ export const actions = {
       if (n) save();
       toast(`Registr aktualizován: ${info.count} přípravků pro révu${n ? `, obnoveno ${n} tvých přípravků` : ''}.`);
     } catch (e) {
-      toast('Aktualizace selhala: ' + e.message);
+      toast(`Aktualizace selhala: ${e.message}. Registr můžeš nahrát ze souboru (viz níže).`);
     }
     if (!dlg.open) render();
   },
@@ -183,6 +183,18 @@ export function initActions() {
     } else if (t.dataset.filter) {
       workFilters[t.dataset.filter] = t.value;
       render();
+    } else if (t.matches('[data-por-upload]') && t.files[0]) {
+      t.files[0].text().then(async body => {
+        const res = await fetch('api/por/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        const info = await res.json();
+        if (!res.ok) throw new Error(info.error || 'HTTP ' + res.status);
+        await loadRegistry(true);
+        const n = refreshLinkedProducts();
+        if (n) save();
+        render();
+        toast(`Registr nahrán (${fmtDate(info.updated)}): ${info.count} přípravků pro révu${n ? `, obnoveno ${n} tvých přípravků` : ''}.`);
+      }).catch(err => toast('Nahrání registru selhalo: ' + err.message))
+        .finally(() => { t.value = ''; });
     } else if (t.matches('[data-import-rv]') && t.files[0]) {
       t.files[0].text().then(text => importRegistryPreview(parseRegistryXml(text)))
         .catch(err => toast('Import selhal: ' + err.message))

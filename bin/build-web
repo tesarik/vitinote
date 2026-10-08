@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Připraví složku dist/web k nahrání na webhosting s PHP (např. Wedos) přes FTP.
+#
+#   bin/build-web                 # aplikace; při prvním spuštění se zeptá na heslo
+#   bin/build-web --with-data     # přibalí i současná data (data/vitinote.json) a stažený registr přípravků
+#   bin/build-web --new-password  # nastaví nové heslo (jinak se ponechá heslo z minulého sestavení)
+#
+# Obsah dist/web nahraj do složky webu na hostingu (u Wedosu do www/ domény nebo subdomény).
+set -euo pipefail
+
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ "$src" != /* ]] && src="$dir/$src"
+done
+APP_DIR="$(cd -P "$(dirname "$src")/.." && pwd)"
+OUT="$APP_DIR/dist/web"
+
+with_data=0
+new_password=0
+for arg in "$@"; do
+  case "$arg" in
+    --with-data) with_data=1 ;;
+    --new-password) new_password=1 ;;
+    *) echo "Neznámý parametr: $arg" >&2; exit 2 ;;
+  esac
+done
+
+# Heslo z minulého sestavení zachovat (jinak by se po každém sestavení všichni museli znovu přihlašovat).
+saved_password=""
+if [ "$new_password" = 0 ] && [ -f "$OUT/data/heslo.json" ]; then
+  saved_password="$(mktemp)"
+  cp "$OUT/data/heslo.json" "$saved_password"
+fi
+
+rm -rf "$OUT"
+mkdir -p "$OUT/data"
+cd "$APP_DIR"
+cp index.html login.html style.css sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png icon-maskable-512.png \
+   apple-touch-icon.png api.php .htaccess "$OUT/"
+cp -r js php "$OUT/"
+[ -f config.php ] && cp config.php "$OUT/"
+
+# Pojistka: i kdyby hosting ignoroval pravidla v hlavním .htaccess, složka s daty zůstane zavřená.
+cat > "$OUT/data/.htaccess" <<'EOF'
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Deny from all
+</IfModule>
+EOF
+
+if [ "$with_data" = 1 ]; then
+  for f in vitinote.json por-reva.json; do
+    [ -f "data/$f" ] && cp "data/$f" "$OUT/data/" && echo "Přibalena data: data/$f"
+  done
+fi
+
+if [ -n "$saved_password" ]; then
+  mv "$saved_password" "$OUT/data/heslo.json"
+  echo "Heslo zůstává z minulého sestavení (nové: bin/build-web --new-password)."
+else
+  echo "Nastav heslo pro přístup k aplikaci na webu:"
+  python3 "$APP_DIR/server.py" --data "$OUT/data/vitinote.json" --set-password
+fi
+
+echo
+echo "Hotovo: $OUT"
+echo "Nahraj CELÝ obsah této složky (i skryté soubory .htaccess) na hosting, např. do www/ přes FTP."
+echo "Složka data/ musí být na hostingu zapisovatelná pro PHP."

@@ -399,7 +399,14 @@ export function renderProducts() {
         ? `Staženo ${fmtDate(registry.updated)}: ${registry.products.length} povolených přípravků pro révu.`
         : 'Registr zatím není stažený (potřebuje běžící server).'}
         Při přidání přípravku ho vyhledáš v registru a doplní se registrační číslo, povolená použití, dávky a ochranné lhůty.</p>
-      <button class="btn" data-action="update-registry"${sync.state === 'local' ? ' disabled' : ''}>Aktualizovat z registru</button>
+      <div class="actions-row">
+        <button class="btn" data-action="update-registry"${sync.state === 'local' ? ' disabled' : ''}>Aktualizovat z registru</button>
+        <label class="btn" style="margin:0;color:var(--text);font-size:1rem">Nahrát registr ze souboru
+          <input type="file" accept=".json,application/json" data-por-upload hidden>
+        </label>
+      </div>
+      <p class="small muted">Když stažení na serveru neprojde (webhosting má časový limit), spusť doma
+        <code>python3 por_registry.py &gt; por-reva.json</code> a soubor nahraj.</p>
     </div>`;
 }
 

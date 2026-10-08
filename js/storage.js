@@ -69,7 +69,8 @@ export async function pushToServer() {
     let res;
     do {
       pushAgain = false;
-      res = await fetch(API_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(db) });
+      // POST (ne PUT): některé webhostingy metodu PUT blokují.
+      res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(db) });
       if (res.status === 401) return toLogin();
       if (!res.ok) throw new Error('HTTP ' + res.status);
     } while (pushAgain);

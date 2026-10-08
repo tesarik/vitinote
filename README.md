@@ -33,6 +33,27 @@ ln -s "$PWD/bin/vitinote" ~/.local/bin/vitinote
 
 Bez skriptu (např. ve Windows): `python3 server.py`.
 
+## Na webhosting (Wedos a jiné s PHP)
+
+Aplikace má i PHP verzi serveru (`api.php`, `php/`, `.htaccess`) se stejným API a stejnými soubory dat jako `server.py`.
+
+1. Připrav složku k nahrání: `bin/build-web --with-data` – zeptá se na heslo a přibalí tvoje současná data
+   (bez `--with-data` začneš na webu s prázdnými daty a zálohu nahraješ v aplikaci přes Data → Obnovit ze zálohy).
+2. V administraci hostingu zapni PHP 8.1 nebo novější a HTTPS certifikát (u Wedosu Let's Encrypt zdarma).
+3. Nahraj **celý obsah** `dist/web/` včetně skrytých `.htaccess` do složky webu (u Wedosu `www/` domény nebo subdomény),
+   např. přes FileZillu. Složka `data/` musí být pro PHP zapisovatelná.
+4. **Kontrola zabezpečení:** `https://tvoje-domena/data/heslo.json` musí vrátit chybu 403 (Forbidden).
+   Pokud se zobrazí obsah souboru, hosting ignoruje `.htaccess` – data přesuň mimo web (viz `config.example.php`).
+5. Otevři `https://tvoje-domena/`, přihlas se a v Přípravky klikni na „Aktualizovat z registru“. Když stažení
+   na hostingu nestihne časový limit, spusť doma `python3 por_registry.py > por-reva.json` a nahraj soubor tlačítkem
+   „Nahrát registr ze souboru“.
+6. Na telefonu otevři stejnou adresu a dej „Přidat na plochu“ – díky HTTPS funguje i offline.
+
+**Aktualizace aplikace:** `bin/build-web` (heslo zůstane) a nahraj obsah `dist/web/` **bez složky `data/`**,
+aby se na webu nepřepsala data. Nové heslo: `bin/build-web --new-password` a nahraj jen `data/heslo.json`.
+
+Po přesunu na web používej jen webovou verzi – data doma a na webu se samy nesynchronizují (přenos přes zálohu v sekci Data).
+
 ## Přístup z telefonu
 
 `--lan` zpřístupní aplikaci ostatním zařízením v síti a vyžaduje heslo (`bin/vitinote --set-password`).

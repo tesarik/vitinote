@@ -7,6 +7,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
+// Který server testy spouští: python (server.py, výchozí) nebo php (api.php, verze pro webhosting).
+export const BACKEND = process.env.VITINOTE_BACKEND || 'python';
+// Zpracování exportu registru v PHP potřebuje rozšíření XMLReader (balíček php-xml).
+export const PHP_HAS_XML = BACKEND !== 'php' || spawnSync('php', ['-r', 'exit(class_exists("XMLReader") ? 0 : 1);']).status === 0;
 export const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const FIXTURES = join(APP_DIR, 'tests', 'fixtures');
 
@@ -35,8 +39,14 @@ export async function startServer({ port, dataFile, porSource = join(FIXTURES, '
     if (r.status !== 0) throw new Error(String(r.stderr));
     args = ['--auth-local', ...args];
   }
-  const proc = spawn('python3', [join(APP_DIR, 'server.py'), '--port', String(port), '--data', dataFile, '--por-source', porSource, ...args],
-    { stdio: 'ignore', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
+  const proc = BACKEND === 'php'
+    // PHP verze (webhosting): vestavěný server s routerem místo .htaccess; nastavení přes proměnné prostředí.
+    ? spawn('php', ['-S', `127.0.0.1:${port}`, '-t', APP_DIR, join(APP_DIR, 'php', 'router.php')], {
+      stdio: 'ignore',
+      env: { ...process.env, VITINOTE_DATA: dataFile, VITINOTE_POR_SOURCE: porSource, VITINOTE_NO_AUTH: password ? '0' : '1' },
+    })
+    : spawn('python3', [join(APP_DIR, 'server.py'), '--port', String(port), '--data', dataFile, '--por-source', porSource, ...args],
+      { stdio: 'ignore', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
   const url = `http://localhost:${port}/`;
   await waitFor(async () => (await fetch(url + 'icon.svg')).ok);
   return {

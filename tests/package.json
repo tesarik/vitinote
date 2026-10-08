@@ -4,8 +4,10 @@
   "type": "module",
   "description": "Testy VitiNote v prohlížeči (Playwright). Aplikace sama žádné závislosti nemá.",
   "scripts": {
-    "test": "python3 -m unittest -q test_por_registry test_server && node --test --test-concurrency=4",
-    "icons": "node make-icons.mjs"
+    "test": "python3 -m unittest -q test_por_registry test_server test_php_parity && node --test --test-concurrency=4",
+    "icons": "node make-icons.mjs",
+    "test:php": "VITINOTE_BACKEND=php node --test --test-concurrency=4",
+    "test:all": "npm test && npm run test:php"
   },
   "devDependencies": {
     "playwright": "^1.63.0"

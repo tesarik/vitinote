@@ -43,6 +43,13 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
 - `style.css` – barvy jako CSS proměnné na `:root`, tmavý režim přes `prefers-color-scheme`. Mobile-first.
 - `server.py` – obsluhuje jen soubory ze seznamu `STATIC_FILES` a moduly `js/**.js`, `GET/PUT /api/data` a registr přípravků (`GET /api/por`,
   `POST /api/por/update`). Zápis je atomický, předchozí verze dat jako `.bak`.
+- `api.php` + `php/lib.php`, `php/por_registry.php` – PHP verze serveru pro webhosting (Wedos). **Stejné API, stejné soubory
+  (`vitinote.json`, `heslo.json`, `por-reva.json`, `zalohy/`) a stejný formát hesla a cookie jako Python verze.** Změnu API
+  vždy udělat v obou. Směrování: `.htaccess` (Apache) / `php/router.php` (`php -S`, testy). Na webu se heslo vyžaduje vždy
+  (bez `heslo.json` vrací 503). Nastavení `config.php` (vzor `config.example.php`), pro testy proměnné `VITINOTE_*`.
+  `bin/build-web` sestaví `dist/web/` k nahrání (gitignore – obsahuje heslo a případně data).
+  Ukládání dat jde přes POST (některé hostingy blokují PUT); `POST /api/por/upload` nahraje hotový výtah registru.
+- `login.html` – přihlašovací stránka pro obě verze (`{error}` se nahradí).
 - `auth.py` – heslo pro přístup z místní sítě (`--set-password`, `--lan` bez hesla nespustí). PBKDF2 hash v `heslo.json`,
   přihlášení = podepsaná cookie (HMAC) na 90 dní. Chráněná je stránka aplikace a `/api/*`; z 127.0.0.1 se heslo nevyžaduje
   (testy to vynutí `--auth-local`). Aplikace při 401 přejde na `login`.
@@ -124,7 +131,8 @@ Odrůdy vinice jsou `varieties: [{ name, area, year, rootstock?, vines?, code?, 
 ```sh
 cd tests && npm install
 CHROME_PATH=/usr/bin/google-chrome npm test   # na tomto stroji nutné; jinde: npx playwright install chromium && npm test
-# npm test spouští i python3 -m unittest (test_por_registry, test_server) a jednotkové testy v Node
+# npm test spouští i python3 -m unittest (test_por_registry, test_server, test_php_parity) a jednotkové testy v Node
+CHROME_PATH=/usr/bin/google-chrome npm run test:php   # celá sada proti PHP verzi (php -S); test:all = obě
 ```
 
 `tests/app.test.mjs` (node:test + Playwright) prochází aplikaci v prohlížeči proti `server.py`.

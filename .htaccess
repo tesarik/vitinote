@@ -1,0 +1,26 @@
+# VitiNote na webhostingu (Apache): stránka aplikace, přihlášení a API jdou přes api.php,
+# data a interní soubory nejsou zvenku dostupné.
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(data|php|dist)(/|$) - [F,L]
+  RewriteRule ^api/(.+)$ api.php?r=$1 [QSA,L]
+  RewriteRule ^(login|logout)$ api.php?r=$1 [QSA,L]
+  RewriteRule ^(index\.html)?$ api.php?r=index [QSA,L]
+</IfModule>
+
+<FilesMatch "\.(json|bak|md|py|lock)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType text/javascript .js
+</IfModule>

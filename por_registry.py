@@ -111,6 +111,13 @@ def build_vine_registry(source=POR_EXPORT_URL, timeout=300):
     return {'updated': date.today().isoformat(), 'source': source, 'products': products}
 
 
+def is_registry(data):
+    """Má data tvar výtahu z build_vine_registry? (kontrola nahraného souboru)"""
+    return (isinstance(data, dict) and isinstance(data.get('updated'), str) and isinstance(data.get('products'), list)
+            and len(data['products']) > 0 and all(isinstance(p, dict) and p.get('regNo') and isinstance(p.get('uses'), list)
+                                                    for p in data['products']))
+
+
 if __name__ == '__main__':
     import json
     data = build_vine_registry(sys.argv[1] if len(sys.argv) > 1 else POR_EXPORT_URL)

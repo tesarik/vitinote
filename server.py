@@ -125,20 +125,33 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_error(404)
         super().do_GET()
 
+    def read_json_body(self, valid, message):
+        """Načte JSON z těla požadavku; při chybě odpoví sám a vrátí None."""
+        length = int(self.headers.get('Content-Length') or 0)
+        if not 0 < length <= MAX_BODY:
+            self.send_error(413 if length else 400)
+            return None
+        try:
+            data = json.loads(self.rfile.read(length))
+            if not valid(data):
+                raise ValueError(message)
+        except ValueError as e:
+            self.send_json(400, {'error': str(e)})
+            return None
+        return data
+
     def do_PUT(self):
         if self.path.split('?', 1)[0] != '/api/data':
             return self.send_error(404)
+        self.save_data()
+
+    def save_data(self):
         if self.require_login('/api/data'):
             return
-        length = int(self.headers.get('Content-Length') or 0)
-        if not 0 < length <= MAX_BODY:
-            return self.send_error(413 if length else 400)
-        try:
-            data = json.loads(self.rfile.read(length))
-            if not isinstance(data, dict) or data.get('version') != 1 or not isinstance(data.get('works'), list):
-                raise ValueError('neplatný formát dat')
-        except ValueError as e:
-            return self.send_json(400, {'error': str(e)})
+        data = self.read_json_body(
+            lambda d: isinstance(d, dict) and d.get('version') == 1 and isinstance(d.get('works'), list), 'neplatný formát dat')
+        if data is None:
+            return
         with write_lock:
             write_atomic(self.data_file, data)
             daily_backup(self.data_file, self.keep_backups)
@@ -148,6 +161,10 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split('?', 1)[0]
         if path == '/login':
             return self.handle_login()
+        if path == '/api/data':   # aplikace ukládá přes POST (některé hostingy PUT blokují); PUT zůstává funkční
+            return self.save_data()
+        if path == '/api/por/upload':
+            return self.upload_registry()
         if path != '/api/por/update':
             return self.send_error(404)
         if self.require_login(path):
@@ -162,6 +179,16 @@ class Handler(SimpleHTTPRequestHandler):
         finally:
             por_lock.release()
         self.log_message('registr POR: %d přípravků pro révu', len(registry['products']))
+        self.send_json(200, {'updated': registry['updated'], 'count': len(registry['products'])})
+
+    def upload_registry(self):
+        """Hotový výtah registru (por-reva.json z `python3 por_registry.py`), když stažení na serveru neprojde."""
+        if self.require_login('/api/por/upload'):
+            return
+        registry = self.read_json_body(por_registry.is_registry, 'není to výtah registru (por-reva.json)')
+        if registry is None:
+            return
+        write_atomic(self.por_file, registry, indent=None, backup=False)
         self.send_json(200, {'updated': registry['updated'], 'count': len(registry['products'])})
 
     def send_data(self):

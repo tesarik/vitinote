@@ -9,3 +9,7 @@ __pycache__/
 
 # Testy
 node_modules/
+
+# Sestavení pro webhosting (bin/build-web) – obsahuje heslo a případně data
+dist/
+config.php

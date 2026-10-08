@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { withApp, startServer, saved, addVineyard, closeBrowser, FIXTURES, APP_DIR } from './helpers.mjs';
+import { withApp, startServer, saved, addVineyard, closeBrowser, FIXTURES, APP_DIR, PHP_HAS_XML } from './helpers.mjs';
 
 after(closeBrowser);
 
@@ -356,7 +356,7 @@ test('převod činností ze starého pevného seznamu', () => withApp(async ({ p
   },
 }));
 
-test('registr ÚKZÚZ: aktualizace, přípravek z registru, použití u postřiku, OL a export POR', () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
+test('registr ÚKZÚZ: aktualizace, přípravek z registru, použití u postřiku, OL a export POR', { skip: !PHP_HAS_XML && 'PHP bez rozšíření XMLReader (php-xml)' }, () => withApp(async ({ page, readData, dialogs, answerDialogs }) => {
   const base = page.url().replace(/#.*$/, '');
   await addVineyard(page, { name: 'Vinice', area: '1' });
 
@@ -990,6 +990,24 @@ test('karta vinice k tisku: obsah za rok, tisk skryje ovládání, PDF', () => w
     works: [{ id: 'a', vineyardId: 'v1', date: isoDaysAgo(1), type: 'Postřik', status: 'done', target: 'plíseň', bbch: 57,
       workers: [{ workerId: 'p1', hours: 2 }], machines: [{ machineId: 'm1', hours: 1 }], products: [{ productId: 'x', dose: 2 }] }],
   },
+}));
+
+test('registr ÚKZÚZ: nahrání hotového výtahu ze souboru (když stažení na serveru neprojde)', () => withApp(async ({ page }) => {
+  const { spawnSync } = await import('node:child_process');
+  const { writeFileSync, mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const out = spawnSync('python3', [join(APP_DIR, 'por_registry.py'), join(FIXTURES, 'registr-por.xml')], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
+  const file = join(mkdtempSync(join(tmpdir(), 'vitinote-por-')), 'por-reva.json');
+  writeFileSync(file, out.stdout);
+
+  await page.goto(page.url().replace(/#.*$/, '') + '#/pripravky');
+  await page.setInputFiles('[data-por-upload]', join(FIXTURES, 'registr-vinic.xml'));
+  await page.waitForFunction(() => /Nahrání registru selhalo/.test(document.querySelector('#toast').textContent));
+  await page.setInputFiles('[data-por-upload]', file);
+  await page.waitForSelector('text=2 povolených přípravků pro révu');
+  await page.click('.page-head [data-action=new-product]');
+  await page.fill('#por-search', 'starotox');
+  assert.match(await text(page, '#por-results'), /Starotox 10 EC 9002-1/);
 }));
 
 test('offline cache: každý modul z js/ je v seznamu sw.js a všechny soubory jdou stáhnout', () => withApp(async ({ server }) => {

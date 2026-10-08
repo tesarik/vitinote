@@ -68,30 +68,11 @@ def check_token(cfg: dict, token: str, now=None) -> bool:
     return hmac.compare_digest(signature, _sign(cfg, expires))
 
 
-LOGIN_PAGE = """<!doctype html>
-<html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#6b1d3a"><title>VitiNote – přihlášení</title><link rel="icon" href="icon.svg">
-<style>
-:root { --bg:#faf7f5; --surface:#fff; --text:#241a1d; --muted:#6f6266; --border:#e4dcd8; --accent:#6b1d3a; --accent-text:#fff; --danger:#b3261e; }
-@media (prefers-color-scheme: dark) { :root { --bg:#171214; --surface:#211a1d; --text:#f1e9ec; --muted:#b3a5aa; --border:#3a2f33; --accent:#d4789b; --accent-text:#1a0f13; --danger:#ff8a80; } }
-* { box-sizing: border-box; }
-body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--text); font:16px/1.45 system-ui, sans-serif; padding:16px; }
-form { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:24px; width:min(360px, 100%); }
-h1 { display:flex; align-items:center; gap:10px; font-size:1.3rem; margin:0 0 16px; }
-label { display:block; font-size:.85rem; font-weight:600; color:var(--muted); margin-bottom:4px; }
-input { width:100%; font:inherit; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; }
-button { margin-top:14px; width:100%; font:inherit; font-weight:600; border:0; border-radius:8px; padding:10px; background:var(--accent); color:var(--accent-text); cursor:pointer; }
-.error { color:var(--danger); font-size:.9rem; margin:10px 0 0; }
-</style></head><body>
-<form method="post" action="login">
-  <h1><img src="icon.svg" alt="" width="32" height="32"> VitiNote</h1>
-  <label for="heslo">Heslo</label>
-  <input id="heslo" name="heslo" type="password" autocomplete="current-password" autofocus required>
-  {error}
-  <button type="submit">Přihlásit</button>
-</form></body></html>"""
+
+
+LOGIN_HTML = Path(__file__).resolve().parent / 'login.html'   # sdílí i PHP verze (php/lib.php)
 
 
 def login_page(error=False) -> bytes:
     msg = '<p class="error">Nesprávné heslo.</p>' if error else ''
-    return LOGIN_PAGE.replace('{error}', msg).encode()
+    return LOGIN_HTML.read_text(encoding='utf-8').replace('{error}', msg).encode()
