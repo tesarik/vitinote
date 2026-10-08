@@ -16,6 +16,7 @@ bin/vitinote                 # spustí server a otevře http://localhost:8000
 ```
 
 Server ukončíš `Ctrl+C`. Data jsou v `data/vitinote.json` (viz [Kde jsou data](#kde-jsou-data)).
+Na počítači, kde server běží, se **heslo nezadává** (viz [Heslo](#heslo)).
 
 Parametry:
 
@@ -36,6 +37,22 @@ ln -s "$PWD/bin/vitinote" ~/.local/bin/vitinote
 ```
 
 Ve Windows (bez bashe): `python server.py` a otevři http://localhost:8000.
+
+## Heslo
+
+Po instalaci **žádné heslo neexistuje** a doma ho nepotřebuješ – na počítači, kde server běží, se nikdy nevyžaduje.
+Heslo je potřeba jen pro přístup z jiných zařízení a **vymýšlíš si ho sám** (aspoň 6 znaků):
+
+| Kde | Kdy | Nastavení | Uloží se do |
+|---|---|---|---|
+| Doma přes Wi-Fi | telefon a `bin/vitinote --lan` | `bin/vitinote --set-password` | `data/heslo.json` |
+| Na webu (Wedos) | vždy | `bin/build-web` (zeptá se při prvním sestavení) | `dist/web/data/heslo.json` → nahraje se na web |
+
+Obě hesla jsou nezávislá a mohou se lišit. V souboru `heslo.json` je jen otisk hesla (hash), heslo z něj nejde přečíst.
+
+- **Zapomenuté heslo / změna:** doma znovu `bin/vitinote --set-password`, pro web `bin/build-web --new-password`
+  a nahrát `dist/web/data/heslo.json`. Změna odhlásí všechna zařízení.
+- **Přihlášení** v prohlížeči vydrží 90 dní, odhlásit se dá v sekci Data → Odhlásit.
 
 ## Nasazení na webhosting (Wedos a jiné s PHP)
 
@@ -103,21 +120,20 @@ PHP verzi spustíš i doma (potřebuje PHP 8.1+, pro aktualizaci registru i roz�
 bin/vitinote --php                                   # ve složce projektu, stejná data jako Python verze
 ```
 
-Stejně jako Python server pouští vestavěný PHP server bez hesla jen požadavky z tohoto počítače;
-na webhostingu (Apache) se heslo vyžaduje vždy. Sestavenou složku pro web vyzkoušíš i s přihlášením:
+Stejně jako Python server pouští vestavěný PHP server bez hesla požadavky z tohoto počítače;
+na webhostingu (Apache) se heslo vyžaduje vždy. Přesně tu složku, kterou nahraješ na web, vyzkoušíš takto:
 
 ```sh
 bin/build-web --with-data
-cd dist/web && php -S localhost:8080 php/router.php  # přihlášení heslem z build-web jen přes jiné zařízení / test
+cd dist/web && php -S localhost:8080 php/router.php  # http://localhost:8080, z tohoto počítače bez hesla
 ```
 
 `php/router.php` dělá při `php -S` totéž co `.htaccess` na hostingu.
 
 ## Přístup z telefonu doma (--lan)
 
-`--lan` zpřístupní aplikaci ostatním zařízením v síti a vyžaduje heslo (`bin/vitinote --set-password`).
-Heslo je uložené jen jako hash v `data/heslo.json`; přihlášení vydrží 90 dní, změna hesla odhlásí všechna zařízení.
-Z počítače, na kterém server běží, se heslo nezadává. Spojení není šifrované (HTTP), takže heslo nepoužívej jinde
+`--lan` zpřístupní aplikaci ostatním zařízením v síti a vyžaduje heslo (viz [Heslo](#heslo)) – bez něj se nespustí.
+Na telefonu otevři `http://<adresa-počítače>:8000` (adresu zjistíš příkazem `hostname -I`). Spojení není šifrované (HTTP), takže heslo nepoužívej jinde
 a v cizích sítích `--lan` nespouštěj.
 
 ## Kde jsou data
