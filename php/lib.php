@@ -164,10 +164,16 @@ function is_https(): bool
         || strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
 }
 
-// Cookie jen pro složku aplikace (např. /vitinote/), ne pro celou doménu.
+// Cookie jen pro složku aplikace (např. /vitinote/), ne pro celou doménu. Bere se z adresy požadavku,
+// ne ze SCRIPT_NAME – ten je na Wedosu vnitřní cesta (/domains/<doména>/…), kterou prohlížeč nezná.
 function cookie_path(): string
 {
-    return PHP_SAPI === 'cli-server' ? '/' : rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\') . '/';
+    if (PHP_SAPI === 'cli-server') {
+        return '/';
+    }
+    $path = (string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    $base = preg_replace('#(api/.*|login|logout|index\.html)$#', '', $path);
+    return str_ends_with($base, '/') ? $base : '/';
 }
 
 function set_session_cookie(string $value, int $maxAge): void
