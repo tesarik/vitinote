@@ -163,6 +163,10 @@ Vinice se párují podle `regNo` a u ručně založených vinic podle kódu blok
   ošetřená plocha, plodina s kódem EPPO, BBCH. Nař. (EU) 2025/2203 dovoluje státům odklad převodu do 1. 1. 2027.
   ČR: předávání XML (příloha č. 5 vyhl. 200/2023 Sb.) do JUDPOR / EPH na Portálu farmáře je povinné jen nad 200 ha
   (orná půda + vinice + chmelnice + sady). Uživatel má ~4 ha, takže stačí CSV export; XML pro JUDPOR není implementované.
+- Uživatel má aplikaci na Wedosu v podsložce domény (2026-10; adresu do veřejného repa nepsat). Před webem je WEDOS CDN (hlavičky `x-cdn-*`),
+  HTTPS PHP pozná (`is_https()`). `SCRIPT_NAME` je tam vnitřní cesta `/domains/<doména>/…` – cesty pro prohlížeč
+  (cookie) brát z `REQUEST_URI`. Na web nahrávat soubory z `dist/web` až po novém `bin/build-web`, nikdy jeho složku `data/`
+  přes existující data.
 - Heslo běží po HTTP (bez TLS) – v místní síti jde odposlechnout. Pro přístup z internetu by byl potřeba HTTPS (např. reverzní proxy).
 
 ## Na co myslet
