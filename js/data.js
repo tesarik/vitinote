@@ -21,7 +21,7 @@ export const activityIdFor = name => 'act-' + name.normalize('NFD').replace(/[\u
 export const defaultActivities = () => DEFAULT_ACTIVITIES.map(([name, kind]) => ({ id: activityIdFor(name), name, kind, hidden: false }));
 
 // `migrated` = jednorázové převody, které už proběhly (nesmí se opakovat nad daty, která uživatel mezitím změnil).
-export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], machines: [], products: [], purchases: [], works: [] });
+export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], machines: [], products: [], purchases: [], works: [], varietyColors: {} });
 
 // Doplní chybějící kolekce a převede starší tvary dat (jedna odrůda jako text → seznam odrůd).
 export function normalizeDb(d) {

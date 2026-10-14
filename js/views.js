@@ -5,6 +5,7 @@ import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
 import { renderPrintCard } from './print-card.js';
+import { renderHarvestDeclaration } from './harvest-declaration.js';
 
 export function workItem(w, { showVineyard = true } = {}) {
   const hours = workHours(w);
@@ -196,7 +197,10 @@ export function renderVineyards() {
   return `
     <div class="page-head">
       <h1>Vinice</h1>
-      <button class="btn primary" data-action="new-vineyard">+ Přidat vinici</button>
+      <div class="actions-row">
+        <a class="btn" href="#/sklizen">Prohlášení o sklizni</a>
+        <button class="btn primary" data-action="new-vineyard">+ Přidat vinici</button>
+      </div>
     </div>
     <div class="card">${planted ? `<ul class="list">${planted}</ul>` : '<p class="empty">Zatím žádné vinice.</p>'}</div>
     <div class="card">
@@ -524,6 +528,7 @@ export function renderSettings() {
       <div class="actions-row">
         <button class="btn" data-action="export-works">Deník prací (CSV)</button>
         <button class="btn" data-action="export-por">Evidence POR / hnojiv (CSV)</button>
+        <button class="btn" data-action="export-harvest-declaration">Prohlášení o sklizni (CSV)</button>
       </div>
       <p class="small muted">Evidence POR obsahuje údaje, které od 1. 1. 2026 vyžaduje nařízení (EU) 2023/564: přípravek a číslo povolení,
         datum a čas zahájení, dávku, díl LPIS (DPB), ošetřenou plochu, plodinu s kódem EPPO a fenofázi BBCH. CSV je strojově čitelný
@@ -593,6 +598,7 @@ export const routes = {
   pracovnici: renderWorkers,
   nastaveni: renderSettings,
   tisk: id => renderPrintCard(id),
+  sklizen: renderHarvestDeclaration,
 };
 
 export function render() {

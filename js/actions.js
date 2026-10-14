@@ -1,5 +1,5 @@
 // Akce tlačítek (data-action) a obsluha událostí ve stránce.
-import { $, $$, byId, download, fmtDate, fmtNum, isPlanned, toast, toCsv, today } from './util.js';
+import { $, $$, byId, download, fmtDate, fmtNum, fold, isPlanned, toast, toCsv, today } from './util.js';
 import { activityName, db, emptyDb, EPPO_VINE, harvestKg, harvestSummary, inPeriod, isPrep, machineName, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
 import { save } from './storage.js';
 import { findPor, loadRegistry, refreshLinkedProducts } from './registry-por.js';
@@ -14,6 +14,7 @@ import { formVarietyNames, harvestRow, machineRow, productRow, workerRow, workFo
 import { importRegistryPreview, parseRegistryXml } from './import-registr-vinic.js';
 import { machineForm } from './forms/machine.js';
 import { purchaseForm } from './forms/purchase.js';
+import { harvestDeclarationCsvRows } from './harvest-declaration.js';
 
 export const actions = {
   'go': el => { location.hash = el.dataset.href; },
@@ -137,6 +138,10 @@ export const actions = {
     const gaps = [missing.regNo && `reg. číslo přípravku u ${missing.regNo}`, missing.dpb && `kód DPB vinice u ${missing.dpb}`].filter(Boolean);
     if (gaps.length) toast(`Export hotový, ale chybí ${gaps.join(' a ')} záznamů – doplň je u přípravků a vinic.`);
   },
+  'export-harvest-declaration': el => {
+    const year = el.dataset.year || $('#export-year').value;
+    download(`vitinote-prohlaseni-o-sklizni-${year}.csv`, toCsv(harvestDeclarationCsvRows(year)), 'text/csv;charset=utf-8');
+  },
   'wipe': () => {
     if (!confirm('Opravdu nevratně smazat všechna data? Doporučuji nejdřív stáhnout zálohu.')) return;
     setDb(emptyDb());
@@ -183,6 +188,9 @@ export function initActions() {
     } else if (t.dataset.filter) {
       workFilters[t.dataset.filter] = t.value;
       render();
+    } else if (t.dataset.varietyColor != null && t.value) {
+      db.varietyColors = { ...db.varietyColors, [fold(t.dataset.varietyColor).trim()]: t.value };
+      save(); render();
     } else if (t.matches('[data-por-upload]') && t.files[0]) {
       t.files[0].text().then(async body => {
         const res = await fetch('api/por/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });

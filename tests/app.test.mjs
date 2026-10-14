@@ -1032,3 +1032,54 @@ test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
     assert.equal(res.status, 200, src);
   }
 }));
+
+test('prohlášení o sklizni: po reg. číslech, bílé a modré, neznámá odrůda a CSV', () => {
+  const harvest = (id, vineyardId, date, rows, extra) => ({ id, vineyardId, date, type: 'Sklizeň', status: 'done', workers: [], products: [], harvest: rows, ...extra });
+  return withApp(async ({ page, readData }) => {
+    const base = page.url().replace(/#.*$/, '');
+    await page.goto(base + '#/vinice');
+    await page.selectOption('#year', '2025');
+    await page.click('a[href="#/sklizen"]');
+    await page.waitForSelector('main h1:has-text("Prohlášení")');
+    assert.equal(await text(page, 'main h1'), 'Prohlášení o sklizni 2025');
+    assert.match(await text(page, 'main'), /do 15\. 1\. 2026/);
+    const table = () => text(page, 'main table');
+    // Ryzlink a Frankovka podle seznamu, „celá vinice“ jednobarevné vinice, vinice bez sklizně s nulou, příprava ne.
+    assert.equal(await table(), 'Reg. číslo vinice Vinice Bílé kg Modré kg 999999/0001 Horní, Malá 1 200 800 999999/0002 Dolní 0 400'
+      + ' bez reg. čísla Nová 0 0 Celkem 1 200 1 200');
+    assert.match(await text(page, 'main'), /Neznámá barva odrůdy .*300 kg zatím není v součtech.*Novinka X/);
+
+    await page.selectOption('[data-variety-color="Novinka X"]', 'red');
+    await saved(page);
+    assert.deepEqual(readData().varietyColors, { 'novinka x': 'red' });
+    assert.match(await table(), /bez reg\. čísla Nová 0 300 Celkem 1 200 1 500/);
+    assert.equal(await page.$('[data-variety-color]'), null);
+
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-harvest-declaration]')]);
+    assert.equal(download.suggestedFilename(), 'vitinote-prohlaseni-o-sklizni-2025.csv');
+    const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8');
+    assert.match(csv, /^﻿Registrační číslo vinice;Vinice;Bílé – vlastní zpracování na víno \(kg\);/);
+    assert.match(csv, /\n999999\/0001;Horní, Malá;1200;0;0;0;800;0;0;0/);
+    assert.match(csv, /\n999999\/0002;Dolní;0;0;0;0;400;0;0;0/);
+  }, {
+    initialData: {
+      version: 1,
+      vineyards: [
+        { id: 'v1', name: 'Horní', area: 1, regNo: '999999/0001', varieties: [{ name: 'Ryzlink rýnský', area: 0.5 }, { name: 'Frankovka', area: 0.5 }] },
+        { id: 'v2', name: 'Dolní', area: 0.5, regNo: '999999/0002', varieties: [{ name: 'Rulandské modré', area: 0.5 }] },
+        { id: 'v3', name: 'Nová', area: 0.2, varieties: [{ name: 'Novinka X', area: 0.2 }] },
+        { id: 'v4', name: 'Pole', area: 1, stage: 'preparation', regNo: '999999/0004', varieties: [] },
+        { id: 'v5', name: 'Malá', area: 0.1, regNo: '999999/0001', varieties: [{ name: 'Pálava', area: 0.1 }] },
+      ],
+      workers: [], products: [],
+      works: [
+        harvest('a', 'v1', '2025-09-20', [{ variety: 'Ryzlink rýnský', kg: 1000.4, sugar: 20 }, { variety: 'Frankovka', kg: 800 }]),
+        harvest('b', 'v1', '2025-10-02', [{ variety: 'Ryzlink rýnský', kg: 200 }], { dateTo: '2025-10-03' }),
+        harvest('c', 'v1', '2025-10-10', [{ variety: 'Frankovka', kg: 999 }], { status: 'planned' }),
+        harvest('d', 'v2', '2024-09-20', [{ variety: '', kg: 700 }]),
+        harvest('f', 'v2', '2025-09-21', [{ variety: '', kg: 400 }]),
+        harvest('e', 'v3', '2025-09-25', [{ variety: 'Novinka X', kg: 300 }]),
+      ],
+    },
+  });
+});
