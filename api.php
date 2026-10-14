@@ -10,6 +10,12 @@ require __DIR__ . '/php/por_registry.php';
 $route = trim((string)($_GET['r'] ?? ''), '/');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+// Na webu jen přes HTTPS, aby heslo ani cookie nešly po síti nešifrovaně (php -S doma běží po HTTP).
+if (PHP_SAPI !== 'cli-server' && !is_https()) {
+    header('Location: https://' . ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '/'), true, 301);
+    exit;
+}
+
 if ($route === 'login') {
     if ($method === 'POST') {
         $cfg = auth_config();
@@ -27,6 +33,10 @@ if ($route === 'login') {
 }
 if ($route === 'logout') {
     set_session_cookie('', 0);
+    if (cookie_path() !== '/') {
+        // starší verze dávala cookie pro celou doménu
+        setcookie(COOKIE, '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => is_https()]);
+    }
     redirect('login');
     exit;
 }

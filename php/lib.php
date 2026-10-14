@@ -164,10 +164,16 @@ function is_https(): bool
         || strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
 }
 
+// Cookie jen pro složku aplikace (např. /vitinote/), ne pro celou doménu.
+function cookie_path(): string
+{
+    return PHP_SAPI === 'cli-server' ? '/' : rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\') . '/';
+}
+
 function set_session_cookie(string $value, int $maxAge): void
 {
     setcookie(COOKIE, $value, [
-        'expires' => $maxAge > 0 ? time() + $maxAge : 1, 'path' => '/',
+        'expires' => $maxAge > 0 ? time() + $maxAge : 1, 'path' => cookie_path(),
         'httponly' => true, 'samesite' => 'Strict', 'secure' => is_https(),
     ]);
 }
