@@ -106,7 +106,7 @@ test('sklizeň po odrůdách a souhrn v detailu vinice', () => withApp(async ({ 
   await page.click('main [data-action=new-work]');
   await page.selectOption('[name=activityId]', { label: 'Sklizeň' });
   const opts = await page.$$eval('select[name=h-variety] option', o => o.map(x => x.textContent));
-  assert.deepEqual(opts, ['— celá vinice —', 'Pálava', 'Sauvignon']);
+  assert.deepEqual(opts, ['— celá vinice —', 'Pálava', 'Sauvignon', 'Bílé hrozny (souhrn)', 'Modré hrozny (souhrn)']);
   await page.selectOption('.row-harvest >> nth=0 >> select', 'Pálava');
   await page.fill('.row-harvest >> nth=0 >> [name=h-kg]', '2000');
   await page.fill('.row-harvest >> nth=0 >> [name=h-sugar]', '22');
@@ -1033,34 +1033,52 @@ test('manifest a ikony pro instalaci', () => withApp(async ({ server }) => {
   }
 }));
 
-test('prohlášení o sklizni: po reg. číslech, bílé a modré, neznámá odrůda a CSV', () => {
+test('prohlášení o produkci: po reg. číslech, víno z výlisnosti, kategorie, neznámá odrůda a CSV', () => {
   const harvest = (id, vineyardId, date, rows, extra) => ({ id, vineyardId, date, type: 'Sklizeň', status: 'done', workers: [], products: [], harvest: rows, ...extra });
   return withApp(async ({ page, readData }) => {
     const base = page.url().replace(/#.*$/, '');
     await page.goto(base + '#/vinice');
     await page.selectOption('#year', '2025');
-    await page.click('a[href="#/sklizen"]');
+    await page.click('a[href="#/prohlaseni"]');
     await page.waitForSelector('main h1:has-text("Prohlášení")');
-    assert.equal(await text(page, 'main h1'), 'Prohlášení o sklizni 2025');
+    assert.equal(await text(page, 'main h1'), 'Prohlášení o produkci 2025');
     assert.match(await text(page, 'main'), /do 15\. 1\. 2026/);
-    const table = () => text(page, 'main table');
-    // Ryzlink a Frankovka podle seznamu, „celá vinice“ jednobarevné vinice, vinice bez sklizně s nulou, příprava ne.
-    assert.equal(await table(), 'Reg. číslo vinice Vinice Bílé kg Modré kg 999999/0001 Horní, Malá 1 200 800 999999/0002 Dolní 0 400'
-      + ' bez reg. čísla Nová 0 0 Celkem 1 200 1 200');
-    assert.match(await text(page, 'main'), /Neznámá barva odrůdy .*300 kg zatím není v součtech.*Novinka X/);
+    const list = () => text(page, 'main .list');
+    // Ryzlink a Frankovka podle seznamu, „celá vinice“ jednobarevné vinice, souhrn bílých, vinice bez reg. čísla zvlášť, příprava ne.
+    assert.match(await list(), /^999999\/0001 Horní, Malá hrozny 2 000 kg · víno bílé 840 l · červené\/růžové 560 l/);
+    assert.match(await list(), /999999\/0002 Dolní hrozny 500 kg · víno bílé 70 l · červené\/růžové 280 l/);
+    assert.match(await list(), /bez reg\. čísla Nová hrozny 300 kg · víno bílé 0 l · červené\/růžové 0 l · 300 kg bez barvy$/);
+    assert.match(await text(page, 'main'), /Celkem: hrozny 2 800 kg · víno bílé 910 l · červené\/růžové 840 l/);
+    assert.match(await text(page, 'main'), /Neznámá barva odrůdy .*300 kg zatím není ve víně.*Novinka X/);
 
     await page.selectOption('[data-variety-color="Novinka X"]', 'red');
     await saved(page);
     assert.deepEqual(readData().varietyColors, { 'novinka x': 'red' });
-    assert.match(await table(), /bez reg\. čísla Nová 0 300 Celkem 1 200 1 500/);
+    assert.match(await list(), /bez reg\. čísla Nová hrozny 300 kg · víno bílé 0 l · červené\/růžové 210 l$/);
     assert.equal(await page.$('[data-variety-color]'), null);
 
+    // Kategorie platí pro všechny vinice se stejným reg. číslem a pamatuje se.
+    await page.selectOption('[data-wine-category="v1,v5"]', 'chzo');
+    await saved(page);
+    assert.deepEqual(readData().vineyards.map(v => v.wineCategory), ['chzo', undefined, undefined, undefined, 'chzo']);
+
+    // Výlisnost z číselníku v Data.
+    await page.goto(base + '#/nastaveni');
+    assert.equal(await page.inputValue('#press-white'), '0,7');
+    await page.fill('#press-white', '0,65');
+    await page.press('#press-white', 'Tab');
+    await saved(page);
+    assert.deepEqual(readData().pressYield, { white: 0.65, red: 0.7 });
+    await page.goto(base + '#/prohlaseni');
+    await page.waitForSelector('main h1:has-text("Prohlášení")');
+    assert.match(await list(), /^999999\/0001 Horní, Malá hrozny 2 000 kg · víno bílé 780 l/);
+
     const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action=export-harvest-declaration]')]);
-    assert.equal(download.suggestedFilename(), 'vitinote-prohlaseni-o-sklizni-2025.csv');
+    assert.equal(download.suggestedFilename(), 'vitinote-prohlaseni-o-produkci-2025.csv');
     const csv = (await import('node:fs')).readFileSync(await download.path(), 'utf8');
-    assert.match(csv, /^﻿Registrační číslo vinice;Vinice;Bílé – vlastní zpracování na víno \(kg\);/);
-    assert.match(csv, /\n999999\/0001;Horní, Malá;1200;0;0;0;800;0;0;0/);
-    assert.match(csv, /\n999999\/0002;Dolní;0;0;0;0;400;0;0;0/);
+    assert.match(csv, /^﻿Registrační číslo vinice;Vinice;Vlastní hrozny \(kg\);Víno bílé \(l\);Víno červené\/růžové \(l\);/);
+    assert.match(csv, /\n999999\/0001;Horní, Malá;2000;780;560;0;0;0;Víno s CHZO/);
+    assert.match(csv, /\n999999\/0002;Dolní;500;65;280;0;0;0;\r?\n/);
   }, {
     initialData: {
       version: 1,
@@ -1077,9 +1095,27 @@ test('prohlášení o sklizni: po reg. číslech, bílé a modré, neznámá odr
         harvest('b', 'v1', '2025-10-02', [{ variety: 'Ryzlink rýnský', kg: 200 }], { dateTo: '2025-10-03' }),
         harvest('c', 'v1', '2025-10-10', [{ variety: 'Frankovka', kg: 999 }], { status: 'planned' }),
         harvest('d', 'v2', '2024-09-20', [{ variety: '', kg: 700 }]),
-        harvest('f', 'v2', '2025-09-21', [{ variety: '', kg: 400 }]),
+        harvest('f', 'v2', '2025-09-21', [{ variety: '', kg: 400 }, { variety: '', color: 'white', kg: 100 }]),
         harvest('e', 'v3', '2025-09-25', [{ variety: 'Novinka X', kg: 300 }]),
       ],
     },
   });
 });
+
+test('sklizeň jako souhrn bílých a modrých hroznů', () => withApp(async ({ page, readData }) => {
+  await page.click('.topbar [data-action=new-work]');
+  await page.selectOption('[name=activityId]', { label: 'Sklizeň' });
+  await page.check('input[name=vineyards] >> nth=0');
+  await page.selectOption('.row-harvest >> nth=0 >> select', '#white');
+  await page.fill('.row-harvest >> nth=0 >> [name=h-kg]', '600');
+  await page.click('[data-action=add-harvest-row]');
+  await page.selectOption('.row-harvest >> nth=1 >> select', '#red');
+  await page.fill('.row-harvest >> nth=1 >> [name=h-kg]', '400');
+  await page.click('#dlg button[type=submit]');
+  await saved(page);
+  assert.deepEqual(readData().works[0].harvest, [{ variety: '', color: 'white', kg: 600, sugar: null }, { variety: '', color: 'red', kg: 400, sugar: null }]);
+  await page.goto(page.url().replace(/#.*$/, '') + '#/vinice/v1');
+  assert.match(await text(page, 'main'), /Odrůda kg t\/ha °NM bílé hrozny 600 – – modré hrozny 400 – –/);
+  await page.click('[data-action=edit-work]');
+  assert.equal(await page.inputValue('.row-harvest >> nth=1 >> select'), '#red');
+}, { initialData: { version: 1, vineyards: [{ id: 'v1', name: 'Vinice', area: 1, varieties: [{ name: 'Pálava' }] }], workers: [], products: [], works: [] } }));

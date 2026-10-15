@@ -1,6 +1,6 @@
 // Formulář práce: pracovníci, přípravky s povoleným použitím, sklizeň po odrůdách.
 import { $, $$, byId, daysBetween, esc, fmtDate, fmtNum, numVal, options, parseNum, sortByName, toast, today, uid } from '../util.js';
-import { db, phiInfo, placeName, productStatus, selectableActivities, sprayDates, vineyardName, workPlaces } from '../data.js';
+import { db, HARVEST_COLORS, phiInfo, placeName, productStatus, selectableActivities, sprayDates, vineyardName, workPlaces } from '../data.js';
 import { convertDose, useLabel } from '../registry-por.js';
 import { selectedYear, setYear } from '../view-state.js';
 import { form, openForm } from '../dialog.js';
@@ -45,14 +45,23 @@ export function applyUseDose(row) {
 
 export const harvestRow = (h = {}, names = []) => `
   <div class="row row-harvest">
-    <select name="h-variety" aria-label="Odrůda" style="flex:3">${harvestVarietyOptions(names, h.variety)}</select>
+    <select name="h-variety" aria-label="Odrůda" style="flex:3">${harvestVarietyOptions(names, h.color && !h.variety ? '#' + h.color : h.variety)}</select>
     <input name="h-kg" inputmode="decimal" placeholder="kg" value="${numVal(h.kg)}" aria-label="Množství (kg)">
     <input name="h-sugar" inputmode="decimal" placeholder="°NM" value="${numVal(h.sugar)}" aria-label="Cukernatost (°NM)">
     <button type="button" class="icon-btn" data-action="remove-row" aria-label="Odebrat">✕</button>
   </div>`;
 
+// Hodnota „#white“ / „#red“ = souhrn bílých / modrých hroznů bez rozpisu po odrůdách.
 export const harvestVarietyOptions = (names, selected = '') =>
-  options(selected && !names.includes(selected) ? [...names, selected] : names, selected, { empty: '— celá vinice —' });
+  options([
+    ...(selected && !selected.startsWith('#') && !names.includes(selected) ? [...names, selected] : names),
+    ...Object.entries(HARVEST_COLORS).map(([id, name]) => ({ id: '#' + id, name: `${name} (souhrn)` })),
+  ], selected, { empty: '— celá vinice —' });
+const harvestFromRow = r => {
+  const v = $('[name=h-variety]', r).value;
+  return { variety: v.startsWith('#') ? '' : v, ...(v.startsWith('#') && { color: v.slice(1) }),
+    kg: parseNum($('[name=h-kg]', r).value), sugar: parseNum($('[name=h-sugar]', r).value) };
+};
 
 // Vinice vybrané v otevřeném formuláři práce (nová práce: zaškrtávátka, úprava: select).
 export function formVineyardIds() {
@@ -257,7 +266,7 @@ export function workForm(w, { copy = false, vineyardId = '', planned = false } =
         target: hasProducts ? (get('target') || [...new Set(products.map(p => p.pest).filter(Boolean))].join(', ')) : '',
         harvest: kind === 'harvest'
           ? $$('.row-harvest', form)
-              .map(r => ({ variety: $('[name=h-variety]', r).value, kg: parseNum($('[name=h-kg]', r).value), sugar: parseNum($('[name=h-sugar]', r).value) }))
+              .map(harvestFromRow)
               .filter(h => h.kg != null || h.sugar != null)
           : [],
         note: get('note'),

@@ -21,7 +21,7 @@ export const activityIdFor = name => 'act-' + name.normalize('NFD').replace(/[\u
 export const defaultActivities = () => DEFAULT_ACTIVITIES.map(([name, kind]) => ({ id: activityIdFor(name), name, kind, hidden: false }));
 
 // `migrated` = jednorázové převody, které už proběhly (nesmí se opakovat nad daty, která uživatel mezitím změnil).
-export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], machines: [], products: [], purchases: [], works: [], varietyColors: {} });
+export const emptyDb = () => ({ version: 1, migrated: { regNoNames: true }, activities: defaultActivities(), vineyards: [], workers: [], machines: [], products: [], purchases: [], works: [], varietyColors: {}, pressYield: { white: 0.7, red: 0.7 } });
 
 // Doplní chybějící kolekce a převede starší tvary dat (jedna odrůda jako text → seznam odrůd).
 export function normalizeDb(d) {
@@ -89,8 +89,11 @@ export const machineName = id => byId(db.machines, id)?.name ?? '(smazaný stroj
 export const machineHours = w => (w.machines || []).reduce((s, e) => s + (+e.hours || 0), 0);
 export const varietyNames = v => [...new Set((v.varieties || []).map(x => x.name))].join(', ');
 export const harvestKg = w => (w.harvest || []).reduce((s, h) => s + (+h.kg || 0), 0);
+// Řádek sklizně: odrůda, nebo souhrn barvy (`color` bez odrůdy), nebo celá vinice.
+export const HARVEST_COLORS = { white: 'Bílé hrozny', red: 'Modré hrozny' };
+export const harvestLabel = h => h.variety || (HARVEST_COLORS[h.color] ? HARVEST_COLORS[h.color].toLowerCase() : 'celá vinice');
 export const harvestSummary = w => (w.harvest || []).map(h => [
-  h.variety || 'celá vinice', h.kg ? `${fmtNum(h.kg, 0)} kg` : '', h.sugar ? `${fmtNum(h.sugar, 1)} °NM` : '',
+  harvestLabel(h), h.kg ? `${fmtNum(h.kg, 0)} kg` : '', h.sugar ? `${fmtNum(h.sugar, 1)} °NM` : '',
 ].filter(Boolean).join(' ')).join(', ');
 export const activityOf = w => byId(db.activities, w.activityId);
 export const activityName = w => activityOf(w)?.name ?? '(smazaná činnost)';

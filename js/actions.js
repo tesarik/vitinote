@@ -1,5 +1,5 @@
 // Akce tlačítek (data-action) a obsluha událostí ve stránce.
-import { $, $$, byId, download, fmtDate, fmtNum, fold, isPlanned, toast, toCsv, today } from './util.js';
+import { $, $$, byId, download, fmtDate, fmtNum, fold, isPlanned, numVal, parseNum, toast, toCsv, today } from './util.js';
 import { activityName, db, emptyDb, EPPO_VINE, harvestKg, harvestSummary, inPeriod, isPrep, machineName, normalizeDb, productAmount, productsSummary, setDb, sortWorksDesc, treatedArea, vineyardName, vName, workerName, workHours } from './data.js';
 import { save } from './storage.js';
 import { findPor, loadRegistry, refreshLinkedProducts } from './registry-por.js';
@@ -140,7 +140,7 @@ export const actions = {
   },
   'export-harvest-declaration': el => {
     const year = el.dataset.year || $('#export-year').value;
-    download(`vitinote-prohlaseni-o-sklizni-${year}.csv`, toCsv(harvestDeclarationCsvRows(year)), 'text/csv;charset=utf-8');
+    download(`vitinote-prohlaseni-o-produkci-${year}.csv`, toCsv(harvestDeclarationCsvRows(year)), 'text/csv;charset=utf-8');
   },
   'wipe': () => {
     if (!confirm('Opravdu nevratně smazat všechna data? Doporučuji nejdřív stáhnout zálohu.')) return;
@@ -191,6 +191,18 @@ export function initActions() {
     } else if (t.dataset.varietyColor != null && t.value) {
       db.varietyColors = { ...db.varietyColors, [fold(t.dataset.varietyColor).trim()]: t.value };
       save(); render();
+    } else if (t.dataset.wineCategory != null) {
+      for (const id of t.dataset.wineCategory.split(',')) {
+        const v = byId(db.vineyards, id);
+        if (v) v.wineCategory = t.value || undefined;
+      }
+      save(); render();
+    } else if (t.dataset.pressYield) {
+      const n = parseNum(t.value);
+      if (!(n > 0 && n <= 1.2)) { toast('Výlisnost zadej jako číslo, např. 0,7.'); t.value = numVal(db.pressYield?.[t.dataset.pressYield] ?? 0.7); return; }
+      db.pressYield = { ...db.pressYield, [t.dataset.pressYield]: n };
+      save();
+      toast('Výlisnost uložena.');
     } else if (t.matches('[data-por-upload]') && t.files[0]) {
       t.files[0].text().then(async body => {
         const res = await fetch('api/por/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });

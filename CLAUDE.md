@@ -61,7 +61,7 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
 
 ### Data
 
-Jeden JSON objekt `{ version: 1, migrated, activities, vineyards, workers, machines, products, purchases, works, varietyColors }`:
+Jeden JSON objekt `{ version: 1, migrated, activities, vineyards, workers, machines, products, purchases, works, varietyColors, pressYield }`:
 - hlavní úložiště: soubor na disku přes `server.py` (výchozí `data/vitinote.json`),
 - kopie v `localStorage` (`vitinote:v1`) pro okamžité načtení a offline režim. Neodeslané změny označuje příznak `vitinote:dirty`.
 
@@ -111,15 +111,18 @@ Sklad: `purchases: [{ id, productId, date, qty, price?, note }]`, záporné `qty
 Zásoba `stockOf` = nákupy − spotřeba v provedených postřicích. Cena `unitPrice` = vážený průměr nákupů, jinak `product.price`.
 Náklady `workCosts` / `vineyardCosts`: lidé (h × `rate`), stroje (mth × `rate`), přípravky (spotřeba × cena); bez sazby → `unpriced`.
 
-Sklizeň je u práce seznam `harvest: [{ variety, kg, sugar }]`. Prázdné `variety` znamená celou vinici.
+Sklizeň je u práce seznam `harvest: [{ variety, color?, kg, sugar }]`. Prázdné `variety` bez `color` znamená celou vinici.
 Odrůdy vinice jsou `varieties: [{ name, area, year, rootstock?, vines?, code?, training? }]` a stejná odrůda může být víckrát
 (různé roky výsadby). Formulář ukazuje jen část polí podle stavu (`VARIETY_FIELDS`), ostatní zachová v `data-extra`.
 
-Prohlášení o sklizni (`#/sklizen`, `js/harvest-declaration.js`) = formulář 201 Registru vinic (ÚKZÚZ, do 15. 1.): provedené
-sklizně roku sečtené po `regNo` (i vinice bez sklizně s nulou), bílé / modré hrozny. Podává se ručně na Portálu farmáře
-(webové služby pro něj nejsou), aplikace připraví čísla a CSV ve sloupcích formuláře. Uživatel vše zpracovává sám,
-proto je všechno „vlastní zpracování na víno“; prodej zpracovatelům a příloha 202 (odběratelé) nejsou implementované.
-Barva odrůdy `varietyColor()`: ruční volba `varietyColors: { <fold(název)>: 'white'|'red' }`, jinak vestavěný seznam.
+Prohlášení o produkci (`#/prohlaseni`, `js/harvest-declaration.js`) = formulář 211 Registru vinic (ÚKZÚZ, ke dni 31. 12.,
+podává se do 15. 1.). Uživatel vše zpracovává sám, proto 211 a ne prohlášení o sklizni (201). Za každé `regNo` (i bez sklizně
+s nulou): vlastní hrozny kg z provedených sklizní roku, víno bílé / červené l = kg × výlisnost (`pressYield: { white, red }`,
+číselník v Data, výchozí 0,7), mošt a ostatní 0, kategorie vína (`vineyard.wineCategory`: chop, chzo, odrudove, bez, ostatni).
+Podává se ručně na Portálu farmáře (webové služby pro něj nejsou), aplikace připraví čísla a CSV ve sloupcích formuláře.
+Příloha 212 (nákupy hroznů od dodavatelů) zatím není. Barva odrůdy `varietyColor()`: ruční volba
+`varietyColors: { <fold(název)>: 'white'|'red' }`, jinak vestavěný seznam. Řádek sklizně může být místo odrůdy souhrn barvy
+(`{ variety: '', color: 'white'|'red' }`, ve formuláři hodnota `#white` / `#red`); zobrazení přes `harvestLabel(h)`.
 
 ### Konvence
 

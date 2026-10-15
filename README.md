@@ -147,8 +147,9 @@ a v cizích sítích `--lan` nespouštěj.
 V sekci **Data** je záloha a obnova (JSON), exporty do CSV (deník prací, evidence POR a hnojiv),
 import vinic z Registru vinic (XML z Portálu farmáře) a číselník činností.
 
-V sekci **Vinice** → „Prohlášení o sklizni“ je souhrn sklizně za rok po registračních číslech vinic (bílé / modré hrozny)
-pro formulář 201 Registru vinic, k opsání na Portál farmáře, k tisku nebo jako CSV.
+V sekci **Vinice** → „Prohlášení o produkci“ jsou za rok připravené údaje pro formulář 211 Registru vinic
+(vlastní hrozny kg a víno bílé / červené v litrech podle výlisnosti z číselníku v Data, kategorie vína) k opsání
+na Portál farmáře, k tisku nebo jako CSV.
 
 ## Registr přípravků ÚKZÚZ
 

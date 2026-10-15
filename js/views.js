@@ -1,11 +1,11 @@
 // Stránky aplikace (render* vrací HTML) a router podle location.hash.
-import { $, $$, addDays, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isoWeek, isPlanned, options, sortByName, thisMonth, today, weekday, WEEKDAYS } from './util.js';
-import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestSummary, inPeriod, isPrep, machineName, periodRange, periodShare, phiInfo, placeName, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, stockOf, unitPrice, varietyNames, vineyardCosts, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
+import { $, $$, addDays, byId, daysBetween, esc, fmtDate, fmtMonth, fmtNum, fold, isoWeek, isPlanned, numVal, options, sortByName, thisMonth, today, weekday, WEEKDAYS } from './util.js';
+import { ACTIVITY_KINDS, activityName, db, fmtWorkDate, harvestKg, harvestLabel, harvestSummary, inPeriod, isPrep, machineName, periodRange, periodShare, phiInfo, placeName, plantedVineyards, productAmount, productsSummary, productStatus, sortVineyards, sortWorksDesc, stockOf, unitPrice, varietyNames, vineyardCosts, vineyardName, vName, workEnd, workerName, workHours, workSearchText } from './data.js';
 import { sync } from './storage.js';
 import { registry } from './registry-por.js';
 import { availableYears, currentYear, inYear, monthOptions, selectedYear, workFilters, workersPeriod, yearLabel } from './view-state.js';
 import { renderPrintCard } from './print-card.js';
-import { renderHarvestDeclaration } from './harvest-declaration.js';
+import { pressYield, renderHarvestDeclaration, varietyColor } from './harvest-declaration.js';
 
 export function workItem(w, { showVineyard = true } = {}) {
   const hours = workHours(w);
@@ -198,7 +198,7 @@ export function renderVineyards() {
     <div class="page-head">
       <h1>Vinice</h1>
       <div class="actions-row">
-        <a class="btn" href="#/sklizen">Prohlášení o sklizni</a>
+        <a class="btn" href="#/prohlaseni">Prohlášení o produkci</a>
         <button class="btn primary" data-action="new-vineyard">+ Přidat vinici</button>
       </div>
     </div>
@@ -304,18 +304,18 @@ export function renderHarvestByVariety(v, works) {
   const rows = new Map();
   for (const w of works) {
     for (const h of w.harvest || []) {
-      const r = rows.get(h.variety) ?? { kg: 0, sugarKg: 0, sugarBase: 0 };
+      const r = rows.get(harvestLabel(h)) ?? { kg: 0, sugarKg: 0, sugarBase: 0, variety: h.variety, color: !h.variety && h.color };
       r.kg += +h.kg || 0;
       if (h.sugar && h.kg) { r.sugarKg += h.sugar * h.kg; r.sugarBase += +h.kg; }
-      rows.set(h.variety, r);
+      rows.set(harvestLabel(h), r);
     }
   }
   if (!rows.size) return '';
-  const areaOf = name => (v.varieties || []).filter(x => x.name === name).reduce((s, x) => s + (+x.area || 0), 0);
+  const areaOf = match => (v.varieties || []).filter(match).reduce((s, x) => s + (+x.area || 0), 0);
   const body = [...rows].sort(([a], [b]) => a.localeCompare(b, 'cs')).map(([name, r]) => {
-    const area = name ? areaOf(name) : (+v.area || 0);
+    const area = r.variety ? areaOf(x => x.name === r.variety) : r.color ? areaOf(x => varietyColor(x.name) === r.color) : (+v.area || 0);
     return `<tr>
-      <td>${esc(name || 'celá vinice')}</td>
+      <td>${esc(name)}</td>
       <td class="num">${fmtNum(r.kg, 0)}</td>
       <td class="num">${area && r.kg ? fmtNum(r.kg / area / 1000) : '–'}</td>
       <td class="num">${r.sugarBase ? fmtNum(r.sugarKg / r.sugarBase, 1) : '–'}</td>
@@ -528,11 +528,21 @@ export function renderSettings() {
       <div class="actions-row">
         <button class="btn" data-action="export-works">Deník prací (CSV)</button>
         <button class="btn" data-action="export-por">Evidence POR / hnojiv (CSV)</button>
-        <button class="btn" data-action="export-harvest-declaration">Prohlášení o sklizni (CSV)</button>
+        <button class="btn" data-action="export-harvest-declaration">Prohlášení o produkci (CSV)</button>
       </div>
       <p class="small muted">Evidence POR obsahuje údaje, které od 1. 1. 2026 vyžaduje nařízení (EU) 2023/564: přípravek a číslo povolení,
         datum a čas zahájení, dávku, díl LPIS (DPB), ošetřenou plochu, plodinu s kódem EPPO a fenofázi BBCH. CSV je strojově čitelný
         formát. Předávání XML do JUDPOR / EPH je v ČR povinné jen při výměře nad 200 ha.</p>
+    </div>
+    <div class="card">
+      <h2>Výlisnost</h2>
+      <p class="small muted">Kolik litrů vína vznikne z 1 kg hroznů. Podle ní se v Prohlášení o produkci dopočítají litry vína z kg sklizně.</p>
+      <div class="row">
+        <div class="field"><label for="press-white">Bílé hrozny (l/kg)</label>
+          <input id="press-white" data-press-yield="white" inputmode="decimal" value="${numVal(pressYield('white'))}"></div>
+        <div class="field"><label for="press-red">Modré hrozny (l/kg)</label>
+          <input id="press-red" data-press-yield="red" inputmode="decimal" value="${numVal(pressYield('red'))}"></div>
+      </div>
     </div>
     <div class="card">
       <div class="page-head"><h2>Činnosti</h2><button class="btn sm" data-action="new-activity">+ Přidat činnost</button></div>
@@ -598,7 +608,7 @@ export const routes = {
   pracovnici: renderWorkers,
   nastaveni: renderSettings,
   tisk: id => renderPrintCard(id),
-  sklizen: renderHarvestDeclaration,
+  prohlaseni: renderHarvestDeclaration,
 };
 
 export function render() {
