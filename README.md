@@ -144,6 +144,10 @@ a v cizích sítích `--lan` nespouštěj.
 - Prohlížeč si drží kopii v localStorage. Když server neběží, změny se ukládají jen tam
   (v záhlaví svítí „Jen v prohlížeči“) a na disk se odešlou, jakmile je server znovu dostupný.
 
+Úvodní stránka **Přehled** ukazuje počet a výměru vinic, odpracované hodiny a počet prací za vybraný rok,
+běžící ochranné lhůty, naplánované a poslední práce. Klepnutím na dlaždici se otevře příslušná sekce
+(vinice → Vinice, hodiny → Lidé, práce → Práce).
+
 V sekci **Data** je záloha a obnova (JSON), exporty do CSV (deník prací, evidence POR a hnojiv),
 import vinic z Registru vinic (XML z Portálu farmáře) a číselník činností.
 
