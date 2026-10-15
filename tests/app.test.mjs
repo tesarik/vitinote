@@ -51,6 +51,16 @@ test('vinice: přidání s odrůdami, úprava a smazání z detailu', () => with
   assert.equal(readData().vineyards.length, 0);
 }));
 
+test('dlaždice na přehledu vedou do sekcí', () => withApp(async ({ page }) => {
+  await addVineyard(page, { name: 'Pod lesem', area: '1' });
+  await page.goto(page.url().split('#')[0] + '#/');
+  assert.deepEqual(await page.$$eval('.stats a.stat', e => e.map(a => a.getAttribute('href'))),
+    ['#/vinice', '#/vinice', '#/pracovnici', '#/prace']);
+  await page.click('.stats a.stat[href="#/prace"]');
+  await page.waitForSelector('input.search');
+  assert.equal(await page.evaluate(() => location.hash), '#/prace');
+}));
+
 test('postřik do dvou vinic: hodiny, náklady, spotřeba a ochranná lhůta', () => withApp(async ({ page, readData }) => {
   await addVineyard(page, { name: 'A', area: '1,2' });
   await addVineyard(page, { name: 'B', area: '0,8' });

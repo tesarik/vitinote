@@ -72,13 +72,14 @@ export function renderDashboard() {
       </div>`;
   }
 
+  // Dlaždice vedou do příslušné sekce.
   return `
     <div class="stats">
-      <div class="stat"><div class="v">${plantedVineyards().length}</div><div class="l">vinic</div></div>
-      <div class="stat"><div class="v">${fmtNum(area)} ha</div><div class="l">celková výměra vinic</div></div>
-      ${prep.length ? `<div class="stat"><div class="v">${prep.length}</div><div class="l">pozemků v přípravě (${fmtNum(prep.reduce((s, v) => s + (+v.area || 0), 0))} ha)</div></div>` : ''}
-      <div class="stat"><div class="v">${fmtNum(hoursShown, 1)} h</div><div class="l">odpracováno ${isCurrent ? 'tento měsíc' : yearLabel()}</div></div>
-      <div class="stat"><div class="v">${worksYear}</div><div class="l">prací ${yearLabel()}</div></div>
+      <a class="stat" href="#/vinice"><div class="v">${plantedVineyards().length}</div><div class="l">vinic</div></a>
+      <a class="stat" href="#/vinice"><div class="v">${fmtNum(area)} ha</div><div class="l">celková výměra vinic</div></a>
+      ${prep.length ? `<a class="stat" href="#/vinice"><div class="v">${prep.length}</div><div class="l">pozemků v přípravě (${fmtNum(prep.reduce((s, v) => s + (+v.area || 0), 0))} ha)</div></a>` : ''}
+      <a class="stat" href="#/pracovnici"><div class="v">${fmtNum(hoursShown, 1)} h</div><div class="l">odpracováno ${isCurrent ? 'tento měsíc' : yearLabel()}</div></a>
+      <a class="stat" href="#/prace"><div class="v">${worksYear}</div><div class="l">prací ${yearLabel()}</div></a>
     </div>
 
     ${phi.length ? `
