@@ -133,6 +133,7 @@ Příloha 212 (nákupy hroznů od dodavatelů) zatím není. Barva odrůdy `vari
 - Datumy se ukládají jako ISO `YYYY-MM-DD` v lokálním čase (`today()`, `toISO()`), nikdy jako `toISOString()` (UTC posun).
 - Komentáře a texty v UI česky.
 - CSV exporty přes `toCsv()` (středník, BOM, desetinná čárka – pro český Excel).
+- Styly `:hover` jen uvnitř `@media (hover: hover)` na konci `style.css` (iPhone by jinak řádek seznamu otevřel až na druhé klepnutí; hlídá test).
 - `select` má vlastní šipku jako `background-image` – u selectů nepoužívat zkratku `background:`, jen `background-color`.
 - Potvrzovací otázky přes `confirm()` (testy je zachytávají přes `dialogs` / `answerDialogs()` z `withApp`).
 

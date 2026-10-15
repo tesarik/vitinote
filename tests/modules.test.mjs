@@ -24,3 +24,9 @@ test('importy odpovídají exportům', () => {
   }
   assert.deepEqual(problems, []);
 });
+
+// iPhone (Safari) bere první klepnutí na prvek se stylem :hover jako najetí myší – řádek seznamu by se otevřel až na druhé.
+test('style.css: :hover jen uvnitř @media (hover: hover)', () => {
+  const css = readFileSync(join(JS, '..', 'style.css'), 'utf8').replace(/@media \(hover: hover\) \{[^]*?\n\}/g, '');
+  assert.deepEqual(css.split('\n').filter(l => l.includes(':hover')), []);
+});
