@@ -698,8 +698,10 @@ test('heslo: bez přihlášení přesměruje na přihlášení, API vrací 401, 
     await page.fill('[name=heslo]', 'tajne-heslo');
     await page.click('button[type=submit]');
     await page.waitForSelector('#sync[data-state=disk]', { state: 'attached' });
+    // Lax, ne Strict: Strict cookie iOS nepošle při spuštění aplikace z plochy.
     const cookie = (await ctx.cookies()).find(c => c.name === 'vitinote_session');
-    assert.ok(cookie.httpOnly && cookie.sameSite === 'Strict');
+    assert.ok(cookie.httpOnly && cookie.sameSite === 'Lax');
+    assert.ok(cookie.expires > Date.now() / 1000 + 80 * 86400, 'zapamatované přihlášení vydrží');
     await addVineyard(page, { name: 'Za heslem' });
 
     await page.goto(server.url + '#/nastaveni');
@@ -708,6 +710,13 @@ test('heslo: bez přihlášení přesměruje na přihlášení, API vrací 401, 
     // Po odhlášení aplikace (i z offline cache) narazí na 401 a vrátí se na přihlášení.
     await page.goto(server.url);
     await page.waitForURL(/\/login$/);
+
+    // Bez „Zapamatovat“ jen cookie do zavření prohlížeče.
+    await page.fill('[name=heslo]', 'tajne-heslo');
+    await page.uncheck('[name=zapamatovat]');
+    await page.click('button[type=submit]');
+    await page.waitForSelector('#sync[data-state=disk]', { state: 'attached' });
+    assert.equal((await ctx.cookies()).find(c => c.name === 'vitinote_session').expires, -1);
   } finally {
     await ctx.close();
     await server.stop();

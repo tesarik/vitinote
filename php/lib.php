@@ -6,6 +6,7 @@ const APP_DIR = __DIR__ . '/..';
 const MAX_BODY = 20 * 1024 * 1024;
 const COOKIE = 'vitinote_session';
 const SESSION_DAYS = 90;
+const SHORT_SESSION_DAYS = 1;
 const POR_EXPORT_URL = 'https://mze.gov.cz/public/app/eagriapp/POR/export.xml';
 
 // Nastavení: výchozí hodnoty, případně config.php (vrací pole) a při vývojovém serveru (php -S) proměnné prostředí.
@@ -144,9 +145,9 @@ function sign(array $cfg, string $payload): string
     return hash_hmac('sha256', $payload, hex2bin($cfg['secret']));
 }
 
-function make_token(array $cfg): string
+function make_token(array $cfg, int $days = SESSION_DAYS): string
 {
-    $expires = (string)(time() + SESSION_DAYS * 86400);
+    $expires = (string)(time() + $days * 86400);
     return $expires . '.' . sign($cfg, $expires);
 }
 
@@ -176,11 +177,13 @@ function cookie_path(): string
     return str_ends_with($base, '/') ? $base : '/';
 }
 
-function set_session_cookie(string $value, int $maxAge): void
+// $maxAge null = cookie do zavření prohlížeče, 0 = smazat. SameSite=Lax: Strict cookie iOS nepošle
+// při spuštění aplikace z plochy a chtělo by heslo pokaždé.
+function set_session_cookie(string $value, ?int $maxAge): void
 {
     setcookie(COOKIE, $value, [
-        'expires' => $maxAge > 0 ? time() + $maxAge : 1, 'path' => cookie_path(),
-        'httponly' => true, 'samesite' => 'Strict', 'secure' => is_https(),
+        'expires' => $maxAge === null ? 0 : ($maxAge > 0 ? time() + $maxAge : 1), 'path' => cookie_path(),
+        'httponly' => true, 'samesite' => 'Lax', 'secure' => is_https(),
     ]);
 }
 

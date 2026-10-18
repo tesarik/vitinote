@@ -20,7 +20,9 @@ if ($route === 'login') {
     if ($method === 'POST') {
         $cfg = auth_config();
         if ($cfg && verify_password($cfg, (string)($_POST['heslo'] ?? ''))) {
-            set_session_cookie(make_token($cfg), SESSION_DAYS * 86400);
+            // bez „Zapamatovat“ cookie jen do zavření prohlížeče (null), token nejdéle den
+            $remember = !empty($_POST['zapamatovat']);
+            set_session_cookie(make_token($cfg, $remember ? SESSION_DAYS : SHORT_SESSION_DAYS), $remember ? SESSION_DAYS * 86400 : null);
             redirect('./');
         } else {
             sleep(1);   // zpomalit zkoušení hesel
@@ -35,7 +37,7 @@ if ($route === 'logout') {
     set_session_cookie('', 0);
     if (cookie_path() !== '/') {
         // starší verze dávala cookie pro celou doménu
-        setcookie(COOKIE, '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict', 'secure' => is_https()]);
+        setcookie(COOKIE, '', ['expires' => 1, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax', 'secure' => is_https()]);
     }
     redirect('login');
     exit;

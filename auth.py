@@ -16,6 +16,7 @@ from pathlib import Path
 ITERATIONS = 200_000
 COOKIE = 'vitinote_session'
 SESSION_DAYS = 90
+SHORT_SESSION_DAYS = 1   # bez „Zapamatovat“: cookie jen do zavření prohlížeče, nejdéle den
 MIN_LENGTH = 6
 
 
@@ -56,8 +57,8 @@ def _sign(cfg: dict, payload: str) -> str:
     return hmac.new(bytes.fromhex(cfg['secret']), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def make_token(cfg: dict, now=None) -> str:
-    expires = int((now or time.time()) + SESSION_DAYS * 86400)
+def make_token(cfg: dict, now=None, days=SESSION_DAYS) -> str:
+    expires = int((now or time.time()) + days * 86400)
     return f'{expires}.{_sign(cfg, str(expires))}'
 
 

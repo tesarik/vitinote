@@ -91,10 +91,14 @@ class Handler(SimpleHTTPRequestHandler):
     def handle_login(self):
         cfg = auth.load(auth_file(self.data_file))
         length = min(int(self.headers.get('Content-Length') or 0), 4096)
-        password = parse_qs(self.rfile.read(length).decode('utf-8', 'replace')).get('heslo', [''])[0]
-        if cfg and auth.verify_password(cfg, password):
-            token = auth.make_token(cfg)
-            return self.redirect('./', f'{auth.COOKIE}={token}; Max-Age={auth.SESSION_DAYS * 86400}; Path=/; HttpOnly; SameSite=Strict')
+        form = parse_qs(self.rfile.read(length).decode('utf-8', 'replace'))
+        if cfg and auth.verify_password(cfg, form.get('heslo', [''])[0]):
+            # SameSite=Lax: Strict cookie iOS nepošle při spuštění aplikace z plochy a chtělo by heslo pokaždé
+            if form.get('zapamatovat'):
+                token, max_age = auth.make_token(cfg), f'; Max-Age={auth.SESSION_DAYS * 86400}'
+            else:
+                token, max_age = auth.make_token(cfg, days=auth.SHORT_SESSION_DAYS), ''
+            return self.redirect('./', f'{auth.COOKIE}={token}{max_age}; Path=/; HttpOnly; SameSite=Lax')
         time.sleep(1)  # zpomalit zkoušení hesel
         self.log_message('neúspěšné přihlášení')
         self.redirect('login?chyba=1')
@@ -114,7 +118,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/login':
             return self.send_login_page()
         if path == '/logout':
-            return self.redirect('login', f'{auth.COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict')
+            return self.redirect('login', f'{auth.COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax')
         if self.require_login(path):
             return
         if path == '/api/data':
