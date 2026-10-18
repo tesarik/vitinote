@@ -52,7 +52,8 @@ Obě hesla jsou nezávislá a mohou se lišit. V souboru `heslo.json` je jen oti
 
 - **Zapomenuté heslo / změna:** doma znovu `bin/vitinote --set-password`, pro web `bin/build-web --new-password`
   a nahrát `dist/web/data/heslo.json`. Změna odhlásí všechna zařízení.
-- **Přihlášení** v prohlížeči vydrží 90 dní, odhlásit se dá v sekci Data → Odhlásit.
+- **Přihlášení** se zaškrtnutým „Zapamatovat přihlášení“ vydrží 90 dní, bez něj jen do zavření prohlížeče (nejdéle den).
+  Odhlásit se dá v sekci Data → Odhlásit.
 
 ## Nasazení na webhosting (Wedos a jiné s PHP)
 
@@ -110,6 +111,7 @@ na webu Data → Stáhnout zálohu, doma Data → Obnovit ze zálohy. Denní zá
 | V záhlaví svítí „Jen v prohlížeči“ | PHP nemůže zapisovat do `data/` – ve FTP klientu nastav složce práva zápisu (např. 755 nebo 775). |
 | Chyba 500 / bílá stránka | Starší PHP – v administraci zvol PHP 8.1 nebo novější. |
 | Chyba 404 u `/login` nebo `/api/…` | Nenahrál se `.htaccess` (skrytý soubor) nebo hosting nemá zapnutý mod_rewrite. |
+| iPhone: nad aplikací z plochy je pruh s ✕ a adresou, po spuštění chce pořád heslo | Ikona ze starší verze – nahraj novou verzi; když to nepomůže, smaž ikonu a přidej ji znovu ze Safari z hlavní stránky aplikace (po přihlášení). |
 | Aktualizace registru selže | Časový limit hostingu – použij „Nahrát registr ze souboru“ (krok 5). |
 
 ### Vyzkoušení webové verze lokálně (PHP)

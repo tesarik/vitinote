@@ -52,7 +52,7 @@ Bez build kroku a bez závislostí: čisté HTML/CSS/JS + Python 3 stdlib. Nepř
   Ukládání dat jde přes POST (některé hostingy blokují PUT); `POST /api/por/upload` nahraje hotový výtah registru.
 - `login.html` – přihlašovací stránka pro obě verze (`{error}` se nahradí).
 - `auth.py` – heslo pro přístup z místní sítě (`--set-password`, `--lan` bez hesla nespustí). PBKDF2 hash v `heslo.json`,
-  přihlášení = podepsaná cookie (HMAC) na 90 dní. Chráněná je stránka aplikace a `/api/*`; z 127.0.0.1 se heslo nevyžaduje
+  přihlášení = podepsaná cookie (HMAC) na 90 dní, bez „Zapamatovat“ (`zapamatovat`) cookie do zavření prohlížeče a token na den. Chráněná je stránka aplikace a `/api/*`; z 127.0.0.1 se heslo nevyžaduje
   (testy to vynutí `--auth-local`). Aplikace při 401 přejde na `login`.
 - Server po každém uložení drží denní zálohy v `zalohy/` vedle dat (posledních 30, `--keep-backups`).
 - `por_registry.py` – z exportu registru přípravků ÚKZÚZ (~100 MB XML, stahování trvá 1–3 min) vytáhne povolené přípravky
@@ -177,6 +177,10 @@ Vinice se párují podle `regNo` a u ručně založených vinic podle kódu blok
   HTTPS PHP pozná (`is_https()`). `SCRIPT_NAME` je tam vnitřní cesta `/domains/<doména>/…` – cesty pro prohlížeč
   (cookie) brát z `REQUEST_URI`. Na web nahrávat soubory z `dist/web` až po novém `bin/build-web`, nikdy jeho složku `data/`
   přes existující data.
+- iOS aplikace z plochy (2026-10, ověřeno u uživatele): přesměrování po odeslání formuláře (POST /login → 303) otevřel iOS
+  v zabudovaném prohlížeči (pruh s ✕ a adresou, vlastní cookies), takže se přihlášení v aplikaci neudrželo. Proto se
+  přihlašuje i odhlašuje přes `fetch` a pak `location.replace()`. Cookie má `SameSite=Lax` (Strict iOS při spuštění z plochy
+  neposílá). Neměnit zpět na obyčejné odeslání formuláře ani na `Strict`; `login.html` musí odkazovat na manifest.
 - Heslo běží po HTTP (bez TLS) – v místní síti jde odposlechnout. Pro přístup z internetu by byl potřeba HTTPS (např. reverzní proxy).
 
 ## Na co myslet
