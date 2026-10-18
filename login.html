@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#6b1d3a"><title>VitiNote – přihlášení</title><link rel="icon" href="icon.svg">
+<meta name="theme-color" content="#6b1d3a"><meta name="apple-mobile-web-app-capable" content="yes"><title>VitiNote – přihlášení</title><link rel="icon" href="icon.svg">
 <link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 :root { --bg:#faf7f5; --surface:#fff; --text:#241a1d; --muted:#6f6266; --border:#e4dcd8; --accent:#6b1d3a; --accent-text:#fff; --danger:#b3261e; }
@@ -23,4 +23,25 @@ button { margin-top:14px; width:100%; font:inherit; font-weight:600; border:0; b
   <label class="remember"><input type="checkbox" name="zapamatovat" value="1" checked> Zapamatovat přihlášení</label>
   {error}
   <button type="submit">Přihlásit</button>
-</form></body></html>
+</form>
+<script>
+// Přihlášení přes fetch a pak přechod skriptem: iOS aplikaci z plochy otevře přesměrování po odeslání
+// formuláře v zabudovaném prohlížeči (pruh s ✕, vlastní cookies) a přihlášení by se v aplikaci neudrželo.
+// Bez JS funguje obyčejné odeslání formuláře.
+const form = document.querySelector('form');
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  const button = form.querySelector('button');
+  button.disabled = true;
+  try {
+    const res = await fetch('login', { method: 'POST', body: new URLSearchParams(new FormData(form)) });
+    if (!res.redirected || /chyba=1/.test(res.url)) {
+      location.replace('login?chyba=1');
+      return;
+    }
+    location.replace('./');
+  } catch {
+    form.submit();
+  }
+});
+</script></body></html>

@@ -599,7 +599,7 @@ export function renderSettings() {
       <button class="btn danger" data-action="wipe">Smazat všechna data</button>
     </div>
     <p class="small muted">VitiNote · ${db.vineyards.length} vinic, ${db.works.length} záznamů prací
-      ${sync.session ? ' · <a href="logout">Odhlásit</a>' : ''}</p>`;
+      ${sync.session ? ' · <a href="logout" data-action="logout">Odhlásit</a>' : ''}</p>`;
 }
 export const routes = {
   '': renderDashboard,

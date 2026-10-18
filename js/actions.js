@@ -52,6 +52,14 @@ export const actions = {
   'new-product': () => productForm(),
   'new-activity': () => activityForm(),
   'pick-por': el => fillProductFromPor(findPor(el.dataset.reg)),
+  // Odhlášení přes fetch: přesměrování by iOS u aplikace z plochy otevřel v zabudovaném prohlížeči.
+  logout: async () => {
+    try {
+      await fetch('logout');
+    } finally {
+      location.replace('login');
+    }
+  },
   'update-registry': async el => {
     el.disabled = true;
     el.textContent = 'Stahuji registr… (100 MB, obvykle 1–3 minuty)';
